@@ -1,0 +1,5 @@
+[
+  "tests/test_smoke.py::test_config_constants_sane",
+  "tests/test_smoke.py::test_config_paths_resolve",
+  "tests/test_smoke.py::test_src_package_importable"
+]
