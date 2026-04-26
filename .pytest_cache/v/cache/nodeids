@@ -1,4 +1,10 @@
 [
+  "tests/test_data_loading.py::test_list_usable_files_returns_known_set",
+  "tests/test_data_loading.py::test_load_drops_unusable",
+  "tests/test_data_loading.py::test_load_keeps_unusable_when_asked",
+  "tests/test_data_loading.py::test_load_renames_typo",
+  "tests/test_data_loading.py::test_session_id_attached",
+  "tests/test_data_loading.py::test_useful_pids_are_all_produced_by_loader",
   "tests/test_smoke.py::test_config_constants_sane",
   "tests/test_smoke.py::test_config_paths_resolve",
   "tests/test_smoke.py::test_src_package_importable"

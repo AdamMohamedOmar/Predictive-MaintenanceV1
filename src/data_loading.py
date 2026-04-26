@@ -3,6 +3,25 @@
 from pathlib import Path
 import pandas as pd
 
+# Files in the carOBD dataset whose values pass physical-bounds checks for all
+# 4 critical signature PIDs (vehicle speed, coolant temp, timing advance, STFT).
+# The other 120 files in the dataset have values that violate physical bounds
+# for timing and/or STFT — likely a firmware-version inconsistency in the
+# original carOBD recordings. See docs/DATA_NOTES.md for full audit details.
+USABLE_CAROBD_FILES = frozenset(
+    {
+        "drive1.csv",
+        "live5.csv",
+        "live6.csv",
+        "live7.csv",
+        "live8.csv",
+        "live9.csv",
+        "live10.csv",
+        "live11.csv",
+        "live12.csv",
+    }
+)
+
 # Map raw carOBD CSV column names → cleaned, charter-aligned names.
 # This is the single source of truth for column names in the project.
 # All downstream code uses the cleaned names.
@@ -81,3 +100,23 @@ def load_carobd_csv(path: Path | str, drop_unusable: bool = True) -> pd.DataFram
     df.attrs["session_id"] = path.stem
     df.attrs["source_file"] = path.name
     return df
+
+
+def list_usable_files(data_dir: Path | str) -> list[Path]:
+    """Return paths of carOBD CSVs that pass our physical-bounds audit.
+
+    Use this everywhere instead of globbing the data directory directly.
+    Centralizes the 'which files do we actually trust' decision in one place.
+
+    Parameters
+    ----------
+    data_dir : Path or str
+        Path to the directory containing the carOBD CSV files.
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of usable file paths. Empty list if data_dir is empty.
+    """
+    data_dir = Path(data_dir)
+    return sorted(p for p in data_dir.glob("*.csv") if p.name in USABLE_CAROBD_FILES)
