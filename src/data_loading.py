@@ -1,43 +1,83 @@
-"""carOBD CSV loading utilities.
-
-Status: STUB. Implementation scheduled for Week 1 Tuesday.
-See docs/WEEK_01.md Tuesday section for the function contracts.
-"""
+"""Loader and column normalizer for carOBD CSV files."""
 
 from pathlib import Path
-
 import pandas as pd
 
+# Map raw carOBD CSV column names → cleaned, charter-aligned names.
+# This is the single source of truth for column names in the project.
+# All downstream code uses the cleaned names.
+_RENAME_MAP = {
+    "ENGINE_RUN_TINE ()": "ENGINE_RUN_TIME",  # typo fix
+    "ENGINE_RPM ()": "ENGINE_RPM",
+    "VEHICLE_SPEED ()": "VEHICLE_SPEED",
+    "THROTTLE ()": "THROTTLE",
+    "ENGINE_LOAD ()": "ENGINE_LOAD",
+    "COOLANT_TEMPERATURE ()": "COOLANT_TEMPERATURE",
+    "LONG_TERM_FUEL_TRIM_BANK_1 ()": "LONG_TERM_FUEL_TRIM_BANK_1",
+    "SHORT_TERM_FUEL_TRIM_BANK_1 ()": "SHORT_TERM_FUEL_TRIM_BANK_1",
+    "INTAKE_MANIFOLD_PRESSURE ()": "INTAKE_MANIFOLD_PRESSURE",
+    "FUEL_TANK ()": "FUEL_TANK_LEVEL_INPUT",
+    "ABSOLUTE_THROTTLE_B ()": "ABSOLUTE_THROTTLE_B",
+    "PEDAL_D ()": "ACCELERATOR_PEDAL_POSITION_D",
+    "PEDAL_E ()": "ACCELERATOR_PEDAL_POSITION_E",
+    "COMMANDED_THROTTLE_ACTUATOR ()": "COMMANDED_THROTTLE_ACTUATOR",
+    "FUEL_AIR_COMMANDED_EQUIV_RATIO ()": "FUEL_AIR_COMMANDED_EQUIV_RATIO",
+    "ABSOLUTE_BAROMETRIC_PRESSURE ()": "ABSOLUTE_BAROMETRIC_PRESSURE",
+    "RELATIVE_THROTTLE_POSITION ()": "RELATIVE_THROTTLE_POSITION",
+    "INTAKE_AIR_TEMP ()": "INTAKE_AIR_TEMPERATURE",
+    "TIMING_ADVANCE ()": "TIMING_ADVANCE",
+    "CATALYST_TEMPERATURE_BANK1_SENSOR1 ()": "CATALYST_TEMPERATURE_BANK1_SENSOR1",
+    "CATALYST_TEMPERATURE_BANK1_SENSOR2 ()": "CATALYST_TEMPERATURE_BANK1_SENSOR2",
+    "CONTROL_MODULE_VOLTAGE ()": "CONTROL_MODULE_VOLTAGE",
+    "COMMANDED_EVAPORATIVE_PURGE ()": "COMMANDED_EVAPORATIVE_PURGE",
+    "TIME_RUN_WITH_MIL_ON ()": "TIME_RUN_WITH_MIL_ON",
+    "TIME_SINCE_TROUBLE_CODES_CLEARED ()": "TIME_SINCE_TROUBLE_CODES_CLEARED",
+    "DISTANCE_TRAVELED_WITH_MIL_ON ()": "DISTANCE_TRAVELED_WITH_MIL_ON",
+    "WARM_UPS_SINCE_CODES_CLEARED ()": "WARM_UPS_SINCE_CODES_CLEARED",
+}
 
-def load_carobd_csv(path: Path | str) -> pd.DataFrame:
-    """Load one carOBD CSV file and return a DataFrame with a timestamp index.
+# PIDs known to be unusable in carOBD (constant or sentinel-only).
+# Documented in docs/DATA_NOTES.md. Loaded callers can opt-out via drop_unusable=False.
+_UNUSABLE_PIDS = {
+    "FUEL_AIR_COMMANDED_EQUIV_RATIO",  # always 0 in carOBD recordings
+    "TIME_RUN_WITH_MIL_ON",  # always 0
+    "DISTANCE_TRAVELED_WITH_MIL_ON",  # always 0
+    "WARM_UPS_SINCE_CODES_CLEARED",  # always 255 (OBD "no data" sentinel)
+}
 
-    Args:
-        path: Path to the CSV file (e.g. data/raw/carOBD/drive1.csv).
 
-    Returns:
-        DataFrame with one row per second of recording. Index is a numeric
-        timestamp in seconds from the start of the recording. Columns are
-        the PIDs present in the file.
+def load_carobd_csv(path: Path | str, drop_unusable: bool = True) -> pd.DataFrame:
+    """Load a carOBD CSV, normalize column names, optionally drop unusable PIDs.
 
-    Raises:
-        FileNotFoundError: if the file does not exist.
+    The session_id (filename stem) is attached as a DataFrame attribute via
+    `.attrs`, which is what the Week 3 session-level splitter will read.
 
-    # TODO (Week 1): Implement. Verify timestamps are monotonic and 1 Hz.
+    Parameters
+    ----------
+    path : Path or str
+        Path to a carOBD CSV file (e.g. data/raw/carOBD/drive1.csv).
+    drop_unusable : bool, default True
+        If True, drops PIDs that are known constants in carOBD.
+        Set False only when explicitly auditing data quality.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns are the cleaned PID names; row index is the integer second.
     """
-    raise NotImplementedError("Week 1 Tuesday task. See docs/WEEK_01.md.")
+    path = Path(path)
+    df = pd.read_csv(path)
 
+    # Verify schema. If a future CSV has an unexpected column, we want to know loudly.
+    unknown = set(df.columns) - set(_RENAME_MAP.keys())
+    if unknown:
+        raise ValueError(f"{path.name}: unknown columns {unknown}. Update _RENAME_MAP.")
 
-def get_healthy_baseline(df: pd.DataFrame, pid_list: list[str]) -> dict:
-    """Compute per-PID mean and std from a healthy recording.
+    df = df.rename(columns=_RENAME_MAP)
 
-    Args:
-        df: A healthy-drive DataFrame loaded by load_carobd_csv.
-        pid_list: Which PIDs to summarize (typically config.USEFUL_PIDS).
+    if drop_unusable:
+        df = df.drop(columns=[c for c in _UNUSABLE_PIDS if c in df.columns])
 
-    Returns:
-        Dict keyed by PID name, each value a dict with keys 'mean' and 'std'.
-
-    # TODO (Week 1): Implement.
-    """
-    raise NotImplementedError("Week 1 Tuesday task. See docs/WEEK_01.md.")
+    df.attrs["session_id"] = path.stem
+    df.attrs["source_file"] = path.name
+    return df
