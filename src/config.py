@@ -42,11 +42,14 @@ RANDOM_SEED = 42
 
 
 # ─── PID selection ────────────────────────────────────────────────────────
-# The 27 PIDs in carOBD include several that are near-constant or irrelevant
-# (e.g. DISTANCE_TRAVELED_WITH_MIL_ON is always 0 on a healthy vehicle).
-# The USEFUL_PIDS list below is the working set for feature extraction.
-# This list is a PLACEHOLDER - confirmed during Week 1 data exploration
-# and updated in docs/DATA_NOTES.md.
+# The 27 PIDs in carOBD include several that are unusable (constant values,
+# OBD sentinels) or unreliable (firmware-version inconsistencies that produce
+# physically impossible values in many files). See docs/DATA_NOTES.md for the
+# full audit.
+#
+# USEFUL_PIDS is the working set for feature extraction. Every PID listed
+# below has been verified to vary plausibly in the audited-clean carOBD
+# subset (see USABLE_CAROBD_FILES in src/data_loading.py).
 USEFUL_PIDS = [
     "ENGINE_RPM",
     "VEHICLE_SPEED",
@@ -59,7 +62,6 @@ USEFUL_PIDS = [
     "ACCELERATOR_PEDAL_POSITION_D",
     "ACCELERATOR_PEDAL_POSITION_E",
     "COMMANDED_THROTTLE_ACTUATOR",
-    "FUEL_AIR_COMMANDED_EQUIV_RATIO",
     "INTAKE_AIR_TEMPERATURE",
     "TIMING_ADVANCE",
     "CONTROL_MODULE_VOLTAGE",
