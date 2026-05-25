@@ -50,7 +50,7 @@ _DEFAULT_MAGNITUDE: dict[str, float] = {
     "air_system": 13.0,               # kPa MAP offset at full ramp
     "fuel_system": 18.0,              # % LTFT bias at full ramp
     "coolant_temp_sensor": 42.0,      # °C stuck-sensor target temperature
-    "throttle_position_sensor": 1.25, # multiplier on THROTTLE at full ramp (1.25 = 25 % over-read)
+    "throttle_position_sensor": 1.35, # multiplier on THROTTLE at full ramp — widened by _TPS_DEADBAND so full-ramp severity stays = 1.0
 }
 
 

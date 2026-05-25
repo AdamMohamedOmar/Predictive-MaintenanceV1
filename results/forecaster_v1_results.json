@@ -1,14 +1,14 @@
 {
-  "coolant_temp_sensor": {
-    "fault_type": "coolant_temp_sensor",
-    "mae": 0.004146794068457464,
-    "mae_pct_of_range": 0.41467940684574645,
+  "air_system": {
+    "fault_type": "air_system",
+    "mae": 0.09671571583520254,
+    "mae_pct_of_range": 9.671571583520254,
     "meets_commit_target": true,
     "meets_stretch_target": true,
     "n_train": 797,
     "n_test": 209,
-    "severity_target_mean": 0.9358405716207849,
-    "severity_target_std": 0.15951018861035543
+    "severity_target_mean": 0.812551951817779,
+    "severity_target_std": 0.1882403945725618
   },
   "fuel_system": {
     "fault_type": "fuel_system",
@@ -21,26 +21,26 @@
     "severity_target_mean": 0.8014689360642904,
     "severity_target_std": 0.19512536048363704
   },
-  "throttle_position_sensor": {
-    "fault_type": "throttle_position_sensor",
-    "mae": 0.21397005045373674,
-    "mae_pct_of_range": 21.397005045373675,
-    "meets_commit_target": true,
-    "meets_stretch_target": false,
-    "n_train": 797,
-    "n_test": 209,
-    "severity_target_mean": 0.8266310383592342,
-    "severity_target_std": 0.2595016745425012
-  },
-  "air_system": {
-    "fault_type": "air_system",
-    "mae": 0.09671571583520254,
-    "mae_pct_of_range": 9.671571583520254,
+  "coolant_temp_sensor": {
+    "fault_type": "coolant_temp_sensor",
+    "mae": 0.002142016701092891,
+    "mae_pct_of_range": 0.2142016701092891,
     "meets_commit_target": true,
     "meets_stretch_target": true,
     "n_train": 797,
     "n_test": 209,
-    "severity_target_mean": 0.812551951817779,
-    "severity_target_std": 0.1882403945725618
+    "severity_target_mean": 0.0027817322850789633,
+    "severity_target_std": 0.028322708813474345
+  },
+  "throttle_position_sensor": {
+    "fault_type": "throttle_position_sensor",
+    "mae": 0.3334746459611793,
+    "mae_pct_of_range": 33.34746459611793,
+    "meets_commit_target": false,
+    "meets_stretch_target": false,
+    "n_train": 797,
+    "n_test": 209,
+    "severity_target_mean": 0.7194946336696945,
+    "severity_target_std": 0.38675786738859197
   }
 }

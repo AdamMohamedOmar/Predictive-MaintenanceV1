@@ -39,6 +39,18 @@ import pandas as pd
 
 # ── Physical thresholds ──────────────────────────────────────────────────────
 
+# Alternator / charging: sustained low voltage while engine is running.
+# Normal alternator output: 13.8–14.7 V.  Below 12.5 V for 60 s = alternator failing.
+_LOW_VOLTAGE_THRESHOLD = 12.5    # V — running engine should be > 13.5 nominal
+_LOW_VOLTAGE_CONSECUTIVE_S = 60  # sustained drop required (not a transient)
+
+# Overheat: above 108°C for 30 consecutive seconds → thermostat stuck closed.
+# Normal max is 100–105°C; above 108°C is the damage zone for head gaskets.
+# This check runs even when the checker is otherwise dormant (warm engine)
+# because an overheating engine can develop this fault at any time.
+_OVERHEAT_THRESHOLD_C = 108.0
+_OVERHEAT_CONSECUTIVE_S = 30
+
 # Thermostat: coolant should reach 75°C within this many seconds of engine start.
 # A stuck-open thermostat keeps the coolant circulating too fast to hold heat.
 # Real-world: Etios warms up in 3–5 minutes; we allow 8 minutes to be generous.
@@ -90,10 +102,11 @@ class ColdStartChecker:
         self._frozen_min_s = frozen_sensor_min_s
         self._iac_warm_min_s = iac_warm_min_s
 
-        # Rolling buffer — list of (coolant, rpm, speed) tuples, one per second
+        # Rolling buffer — one entry per second for each signal
         self._coolant_buf: list[float] = []
         self._rpm_buf: list[float] = []
         self._speed_buf: list[float] = []
+        self._voltage_buf: list[float] = []  # CONTROL_MODULE_VOLTAGE
 
         self._elapsed_s: int = 0
         self._warm_since_s: Optional[int] = None  # when coolant first hit target
@@ -104,7 +117,13 @@ class ColdStartChecker:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def update(self, coolant: float, rpm: float, speed: float) -> list[ColdStartAlert]:
+    def update(
+        self,
+        coolant: float,
+        rpm: float,
+        speed: float,
+        voltage: float = 14.0,
+    ) -> list[ColdStartAlert]:
         """Ingest one second of sensor data and return any new alerts.
 
         Parameters
@@ -112,23 +131,34 @@ class ColdStartChecker:
         coolant : float   COOLANT_TEMPERATURE in °C
         rpm : float       ENGINE_RPM
         speed : float     VEHICLE_SPEED in km/h
+        voltage : float   CONTROL_MODULE_VOLTAGE in V (default 14.0 when absent)
 
         Returns
         -------
         list[ColdStartAlert]
             New alerts since the last update.  Empty list if nothing new.
         """
-        if self._dormant:
-            return []
-
+        # Always append to buffers — overheat and alternator checks need
+        # data even after the checker is otherwise dormant
         self._coolant_buf.append(coolant)
         self._rpm_buf.append(rpm)
         self._speed_buf.append(speed)
+        self._voltage_buf.append(voltage)
         self._elapsed_s += 1
 
         # Track when engine first reached operating temperature
         if self._warm_since_s is None and coolant >= _WARMUP_TARGET_TEMP:
             self._warm_since_s = self._elapsed_s
+
+        if self._dormant:
+            # Only run always-on checks post-dormancy (overheat + alternator)
+            new_alerts: list[ColdStartAlert] = []
+            for check in (self._check_overheat, self._check_alternator):
+                alert = check()
+                if alert:
+                    new_alerts.append(alert)
+            self._alerts.extend(new_alerts)
+            return new_alerts
 
         new_alerts = self._evaluate()
         self._alerts.extend(new_alerts)
@@ -171,6 +201,7 @@ class ColdStartChecker:
         self._coolant_buf.clear()
         self._rpm_buf.clear()
         self._speed_buf.clear()
+        self._voltage_buf.clear()
         self._elapsed_s = 0
         self._warm_since_s = None
         self._dormant = False
@@ -193,6 +224,12 @@ class ColdStartChecker:
         alert = self._check_iac_valve()
         if alert:
             new.append(alert)
+
+        # Overheat and alternator are always-on checks (also run post-dormancy)
+        for check in (self._check_overheat, self._check_alternator):
+            alert = check()
+            if alert:
+                new.append(alert)
 
         return new
 
@@ -262,6 +299,65 @@ class ColdStartChecker:
                 f"thermal variation; a flat signal indicates a stuck sensor."
             ),
             confidence=0.95,
+            triggered_at_s=self._elapsed_s,
+        )
+
+    def _check_overheat(self) -> Optional[ColdStartAlert]:
+        """Sustained coolant > 108°C → thermostat stuck closed / cooling failure.
+
+        This is the dangerous failure mode that destroys head gaskets.  Unlike
+        the other rules, it is checked both during and after warm-up — hence
+        the update() method calls it even when dormant.
+        """
+        rule = "thermostat_stuck_closed"
+        if rule in self._fired:
+            return None
+        if self._elapsed_s < _OVERHEAT_CONSECUTIVE_S:
+            return None  # not enough data yet
+        recent = self._coolant_buf[-_OVERHEAT_CONSECUTIVE_S:]
+        if min(recent) < _OVERHEAT_THRESHOLD_C:
+            return None  # at least one cool reading — not sustained overheat
+
+        self._fired.add(rule)
+        return ColdStartAlert(
+            rule=rule,
+            description=(
+                f"Coolant has been above {_OVERHEAT_THRESHOLD_C}°C for "
+                f"{_OVERHEAT_CONSECUTIVE_S}s. STOP DRIVING — head gasket "
+                f"damage risk. Thermostat may be stuck closed."
+            ),
+            confidence=0.98,
+            triggered_at_s=self._elapsed_s,
+        )
+
+    def _check_alternator(self) -> Optional[ColdStartAlert]:
+        """Sustained low CONTROL_MODULE_VOLTAGE while engine running → alternator fault.
+
+        Normal alternator output is 13.8–14.7 V.  A sustained drop below
+        12.5 V while ENGINE_RPM > 600 indicates the alternator is failing
+        or the battery is not holding charge.
+        """
+        rule = "alternator_low_output"
+        if rule in self._fired:
+            return None
+        if len(self._voltage_buf) < _LOW_VOLTAGE_CONSECUTIVE_S:
+            return None  # not enough data yet
+        recent_v = self._voltage_buf[-_LOW_VOLTAGE_CONSECUTIVE_S:]
+        if max(recent_v) > _LOW_VOLTAGE_THRESHOLD:
+            return None  # voltage recovered — not sustained
+        recent_rpm = self._rpm_buf[-_LOW_VOLTAGE_CONSECUTIVE_S:]
+        if min(recent_rpm) < 600:
+            return None  # engine not actually running throughout window
+
+        self._fired.add(rule)
+        return ColdStartAlert(
+            rule=rule,
+            description=(
+                f"CONTROL_MODULE_VOLTAGE sustained below {_LOW_VOLTAGE_THRESHOLD}V "
+                f"for {_LOW_VOLTAGE_CONSECUTIVE_S}s while engine running. "
+                f"Alternator output low or battery failing."
+            ),
+            confidence=0.85,
             triggered_at_s=self._elapsed_s,
         )
 

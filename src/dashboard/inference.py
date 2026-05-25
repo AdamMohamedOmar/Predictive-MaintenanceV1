@@ -94,6 +94,12 @@ class DashboardState:
     # Top SHAP features for the current prediction (list of (name, value) pairs)
     top_features: list  # list[tuple[str, float]]
 
+    # Input sanity check result — False when the adapter sent a physically impossible
+    # row (e.g. RPM=0 + speed=50, fuel trims at ±75%).  Inference is skipped and
+    # the last-known state is held until a good row arrives.
+    data_quality_ok: bool = True
+    data_quality_violations: list = field(default_factory=list)
+
 
 def _initial_state() -> DashboardState:
     """Return a blank state used before the first window is ready."""
@@ -214,6 +220,30 @@ class InferenceEngine:
         """
         self._elapsed_s += 1
 
+        # ── 0. Physics sanity check — skip inference on impossible rows ──
+        # Cheap Bluetooth clones occasionally deliver garbage (RPM=0 + speed=50,
+        # fuel trims at ±75%).  Classifying garbage produces confident false alarms.
+        from src.dashboard.sanity import check_row
+        verdict = check_row(row)
+        if not verdict.ok:
+            prev = self._last_state
+            self._last_state = DashboardState(
+                elapsed_s=self._elapsed_s,
+                latest_row=row,
+                buffer_ready=prev.buffer_ready,
+                classifier_label=prev.classifier_label,
+                classifier_confidence=prev.classifier_confidence,
+                all_class_probs=prev.all_class_probs,
+                severities=prev.severities,
+                forecasts=prev.forecasts,
+                stable_alert=prev.stable_alert,
+                rule_alerts=prev.rule_alerts,
+                top_features=prev.top_features,
+                data_quality_ok=False,
+                data_quality_violations=verdict.violations,
+            )
+            return self._last_state
+
         # ── 1. ColdStartChecker runs at 1 Hz (needs second-level resolution) ──
         # row.get(key, default) returns NaN (not the default) when the key exists
         # with a NaN value — e.g. an ECU that doesn't expose that PID.
@@ -221,10 +251,12 @@ class InferenceEngine:
         raw_coolant = row.get("COOLANT_TEMPERATURE", 90.0)
         raw_rpm = row.get("ENGINE_RPM", 800.0)
         raw_speed = row.get("VEHICLE_SPEED", 0.0)
+        raw_voltage = row.get("CONTROL_MODULE_VOLTAGE", 14.0)
         new_rule_alerts = self._cold_start.update(
             coolant=90.0 if math.isnan(raw_coolant) else raw_coolant,
             rpm=800.0 if math.isnan(raw_rpm) else raw_rpm,
             speed=0.0 if math.isnan(raw_speed) else raw_speed,
+            voltage=14.0 if math.isnan(raw_voltage) else raw_voltage,
         )
         for ra in new_rule_alerts:
             self._alerter.ingest_rule_alert(ra)
@@ -256,6 +288,8 @@ class InferenceEngine:
                 stable_alert=self._alerter.state,
                 rule_alerts=list(self._alerter.state.rule_alerts),
                 top_features=prev.top_features,
+                data_quality_ok=True,
+                data_quality_violations=[],
             )
 
         return self._last_state
@@ -274,6 +308,17 @@ class InferenceEngine:
     def current_state(self) -> DashboardState:
         """Last computed state without consuming a new row."""
         return self._last_state
+
+    @property
+    def degraded_pid_count(self) -> int:
+        """Count of distinct PIDs that have ever been NaN-filled.
+
+        Each PID contributes 5 features (mean/std/min/max/delta), so dividing
+        the warned-feature count by 5 gives an approximate PID count.
+        Cross-PID and regime features (not multiples of 5) are excluded from
+        the threshold check — only standard PID features are counted.
+        """
+        return len(self._nan_warned) // 5
 
     # ------------------------------------------------------------------
     # Internal
@@ -353,12 +398,18 @@ class InferenceEngine:
             except (ValueError, KeyError):
                 severities[fault] = 0.0
 
-        # Forecasts: predicted severity 60 s from now.
-        # predict_all() normalises once for all 4 fault types instead of 4×.
-        try:
-            forecasts = self._forecaster.predict_all(feats)
-        except Exception:
+        # Forecaster trained on POST-ONSET windows only — calling it on healthy
+        # data extrapolates off-distribution and produces phantom severities
+        # (observed 0.91 on multiple clean carOBD sessions during expert review).
+        # Skip the forecast on healthy / cold_start / warming_up labels.
+        if label in ("healthy", "cold_start", "warming_up"):
             forecasts = {fault: 0.0 for fault in FAULT_TYPES}
+        else:
+            try:
+                forecasts = self._forecaster.predict_all(feats)
+            except Exception as exc:
+                log.warning("predict_all failed (%s) — zeroing forecasts", exc)
+                forecasts = {fault: 0.0 for fault in FAULT_TYPES}
 
         return DashboardState(
             elapsed_s=self._elapsed_s,
@@ -372,4 +423,6 @@ class InferenceEngine:
             stable_alert=self._alerter.state,
             rule_alerts=list(self._alerter.state.rule_alerts),
             top_features=top_features,
+            data_quality_ok=True,
+            data_quality_violations=[],
         )

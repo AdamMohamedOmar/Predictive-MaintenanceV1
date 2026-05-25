@@ -150,6 +150,50 @@ def test_dormant_checker_returns_no_new_alerts():
     assert new == []
 
 
+# ── Overheat rule ─────────────────────────────────────────────────────────────
+
+def test_overheat_alert_fires_at_high_coolant():
+    """30 consecutive seconds above 108°C must trigger thermostat_stuck_closed."""
+    c = ColdStartChecker(warmup_timeout_s=300, iac_warm_min_s=5)
+    # First warm the engine normally
+    _feed(c, coolant=90.0, rpm=900.0, speed=0.0, n=120)
+    # Now simulate 30s of dangerously high coolant
+    all_new = []
+    for _ in range(30):
+        all_new += c.update(coolant=112.0, rpm=900.0, speed=0.0)
+    assert any(a.rule == "thermostat_stuck_closed" for a in all_new), (
+        "overheat alert not fired — check _check_overheat() consecutive-seconds logic"
+    )
+
+
+def test_overheat_alert_does_not_fire_on_brief_spike():
+    """A single spike above 108°C must not trigger — only sustained heat does."""
+    c = ColdStartChecker(warmup_timeout_s=300, iac_warm_min_s=5)
+    _feed(c, coolant=90.0, rpm=900.0, speed=0.0, n=120)
+    # 10 seconds above threshold — less than the 30s consecutive requirement
+    all_new = []
+    for _ in range(10):
+        all_new += c.update(coolant=112.0, rpm=900.0, speed=0.0)
+    assert not any(a.rule == "thermostat_stuck_closed" for a in all_new)
+
+
+def test_overheat_alert_fires_even_after_dormancy():
+    """Overheat check must run even after the checker goes dormant."""
+    c = ColdStartChecker(warmup_timeout_s=300, iac_warm_min_s=5)
+    # Warm up to dormancy
+    _feed(c, coolant=80.0, n=1)
+    _feed(c, coolant=90.0, rpm=800.0, speed=0.0, n=10)
+    assert c.is_dormant
+
+    # Then simulate sustained overheat while dormant
+    all_new = []
+    for _ in range(30):
+        all_new += c.update(coolant=112.0, rpm=900.0, speed=0.0)
+    assert any(a.rule == "thermostat_stuck_closed" for a in all_new), (
+        "overheat alert not fired from dormant checker"
+    )
+
+
 # ── Alert structure ───────────────────────────────────────────────────────────
 
 def test_alert_has_required_fields():

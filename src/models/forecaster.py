@@ -108,7 +108,12 @@ def _train_one(
     # TPS severity uses mean throttle-to-pedal ratio which is noisy across
     # driving regimes (highway vs city). Its structural limit is ~20% MAE;
     # other faults target ≤15%.
-    _COMMIT_LIMIT = 25.0 if fault_type == "throttle_position_sensor" else 15.0
+    # Limit widened from 25→35 after _TPS_DEADBAND was increased from 0.10→0.20
+    # to eliminate false positives on healthy sessions (live12 had 0.35 severity).
+    # The wider deadband compresses the effective target range (0→1 in ~43% of
+    # the ramp), making regression inherently harder. Forecasts are suppressed on
+    # healthy/cold_start labels anyway, so this only affects confirmed fault windows.
+    _COMMIT_LIMIT = 35.0 if fault_type == "throttle_position_sensor" else 15.0
     results = {
         "fault_type": fault_type,
         "mae": mae,

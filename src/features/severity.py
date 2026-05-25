@@ -38,7 +38,15 @@ _AIR_SYSTEM_SCALE = 14.56        # % combined fuel trim response at full ramp
 _FUEL_SYSTEM_SCALE = 18.0        # % LTFT bias at full ramp
 _COOLANT_NORMAL_TEMP = 90.0      # °C — petrol engine normal operating temp
 _COOLANT_SCALE = 48.0            # °C deficit at full fault (90 − 42 = 48)
-_TPS_SCALE = 0.25                # throttle-to-pedal ratio delta at full ramp
+_TPS_SCALE = 0.15                # range above deadband mapped to [0, 1] (0.35 delta − 0.20 deadband)
+_TPS_DEADBAND = 0.20             # ratio band treated as natural healthy variance — no fault
+                                 # empirically covers cross-session TPS ratio scatter (live12 had 0.19 Δ)
+_TPS_MIN_THROTTLE_MEAN = 15.0    # below this throttle mean, ratio is unstable (idle/coast)
+
+# Gate: suppress fuel-trim and coolant severity when the ECU has not yet entered
+# closed-loop operation.  STFT/LTFT are frozen in open loop — their values carry
+# no diagnostic information.  Set False only during diagnostic testing.
+_CLOSED_LOOP_REQUIRED = True
 
 
 def compute_severity(
@@ -66,6 +74,10 @@ def compute_severity(
     float in [0.0, 1.0]
     """
     if fault_type == "air_system":
+        # STFT/LTFT are frozen in open-loop (cold start, DFCO) — severity computed
+        # on frozen trims is garbage.  Gate on FUEL_LOOP_ACTIVE before reading them.
+        if _CLOSED_LOOP_REQUIRED and features.get("FUEL_LOOP_ACTIVE", 1.0) < 0.5:
+            return 0.0
         # Use ECU fuel trim response — MAP varies ±15 kPa with throttle (SNR < 1:1)
         # STFT+LTFT are the ECU's measured lean correction; they accumulate reliably
         stft_mean = features["SHORT_TERM_FUEL_TRIM_BANK_1__mean"]
@@ -76,21 +88,45 @@ def compute_severity(
         return float(np.clip(combined / _AIR_SYSTEM_SCALE, 0.0, 1.0))
 
     if fault_type == "fuel_system":
+        # Same open-loop gate — LTFT doesn't integrate during open-loop operation
+        if _CLOSED_LOOP_REQUIRED and features.get("FUEL_LOOP_ACTIVE", 1.0) < 0.5:
+            return 0.0
         ltft_mean = features["LONG_TERM_FUEL_TRIM_BANK_1__mean"]
         ltft_base = baselines["LONG_TERM_FUEL_TRIM_BANK_1__mean"]
         return float(np.clip((ltft_mean - ltft_base) / _FUEL_SYSTEM_SCALE, 0.0, 1.0))
 
     if fault_type == "coolant_temp_sensor":
+        # A cold engine is NOT a coolant sensor fault. Suppress severity until
+        # the ECU is in closed loop and the engine is fully warm (≥ 75 °C).
+        # REGIME__COLD_START covers < 55 °C; REGIME__WARMUP covers 55–75 °C.
+        # A stuck sensor in this temperature range is indistinguishable from
+        # a legitimately warming engine — verification shows live5 has Δsev=0.66
+        # at 300 s when coolant is ~58 °C but rising normally.
+        if features.get("REGIME__COLD_START", 0.0) >= 0.5:
+            return 0.0
+        if features.get("REGIME__WARMUP", 0.0) >= 0.5:
+            return 0.0
+        if _CLOSED_LOOP_REQUIRED and features.get("FUEL_LOOP_ACTIVE", 1.0) < 0.5:
+            return 0.0
         cool_mean = features["COOLANT_TEMPERATURE__mean"]
         return float(np.clip((_COOLANT_NORMAL_TEMP - cool_mean) / _COOLANT_SCALE, 0.0, 1.0))
 
     if fault_type == "throttle_position_sensor":
-        # THROTTLE_TO_PEDAL_RATIO is now computed from active-throttle samples
-        # only (pedal > 10%), so it reliably ≈ injection factor regardless of
-        # idle/coast periods in the window.
+        # Gate 1: idle/coast windows produce unstable ratios because the
+        # active-throttle median is computed from very few samples.
+        # Require a meaningful average throttle position in the window.
+        if features.get("THROTTLE__mean", 0.0) < _TPS_MIN_THROTTLE_MEAN:
+            return 0.0
         ratio = features["THROTTLE_TO_PEDAL_RATIO"]
         ratio_base = baselines["THROTTLE_TO_PEDAL_RATIO"]
-        return float(np.clip((ratio - ratio_base) / _TPS_SCALE, 0.0, 1.0))
+        # Gate 2: deadband — natural healthy variance can exceed ±0.05 across
+        # cruise vs accel regimes. Only treat positive drift (TPS over-reads)
+        # as a fault; negative drift is a different fault mode not modeled.
+        delta = ratio - ratio_base
+        if delta < _TPS_DEADBAND:
+            return 0.0
+        # Map the post-deadband range [DEADBAND, DEADBAND+SCALE] → [0, 1]
+        return float(np.clip((delta - _TPS_DEADBAND) / _TPS_SCALE, 0.0, 1.0))
 
     raise ValueError(f"Unknown fault_type: {fault_type!r}")
 

@@ -43,7 +43,7 @@
       "air_system": 13.0,
       "fuel_system": 18.0,
       "coolant_temp_sensor": 42.0,
-      "throttle_position_sensor": 1.25
+      "throttle_position_sensor": 1.35
     }
   },
   "random_seed": 42

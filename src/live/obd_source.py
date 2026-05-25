@@ -138,6 +138,29 @@ class LiveObdSource:
 
         if self._conn.status() == OBDStatus.CAR_CONNECTED:
             self._supported_pids = self._discover_pids()
+
+            # Verify the ECU is returning live data, not just confirming the bus.
+            # Cheap clones report CAR_CONNECTED in ACC-only key position; the ECU
+            # then returns null on every query.  ENGINE_RPM < 50 means ignition is
+            # not in RUN mode or the ECU is not yet awake.
+            if "ENGINE_RPM" in self._supported_pids:
+                import math
+                try:
+                    resp = self._conn.query(PID_MAP["ENGINE_RPM"])
+                    rpm = to_float(resp)
+                    if math.isnan(rpm) or rpm < 50:
+                        log.warning(
+                            "ELM327 connected but ENGINE_RPM=%s — ignition in ACC, "
+                            "or ECU not awake yet. Start the engine before connecting.",
+                            rpm,
+                        )
+                        self._connected = False
+                        return False
+                except Exception as exc:
+                    log.warning("ENGINE_RPM liveness check failed: %s", exc)
+                    self._connected = False
+                    return False
+
             self._connected = True
             log.info(
                 "Connected. %d / %d PIDs supported by ECU: %s",
