@@ -65,11 +65,21 @@ _UNUSABLE_PIDS = {
 }
 
 
-def load_carobd_csv(path: Path | str, drop_unusable: bool = True) -> pd.DataFrame:
+def load_carobd_csv(
+    path: Path | str,
+    drop_unusable: bool = True,
+) -> pd.DataFrame:
     """Load a carOBD CSV, normalize column names, optionally drop unusable PIDs.
 
+    Cold-start rows (low coolant temp) are intentionally KEPT.  The regime
+    detector in src/features/regime.py labels them correctly, and the
+    cold_start class in the classifier handles them at the model level.
+    Trimming them would discard real diagnostic signals: slow warm-up
+    (thermostat), IAC valve faults, and ECT sensor lies all show up first
+    during cold-start.
+
     The session_id (filename stem) is attached as a DataFrame attribute via
-    `.attrs`, which is what the Week 3 session-level splitter will read.
+    `.attrs`, which is what the session-level splitter reads.
 
     Parameters
     ----------

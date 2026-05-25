@@ -1,0 +1,375 @@
+"""Per-row inference pipeline for the live dashboard.
+
+Architecture
+------------
+InferenceEngine wraps all five ML components into a single ``update(row)``
+call that the Streamlit loop invokes once per row:
+
+  CsvStreamer  →  InferenceEngine.update(row)  →  DashboardState
+                       │
+                       ├─ ColdStartChecker  (every row, deterministic rules)
+                       ├─ rolling 60-row buffer
+                       │      └─ every 10 rows (WINDOW_STRIDE_S):
+                       │            ├─ extract_features()
+                       │            ├─ XGBClassifier  → label + probabilities
+                       │            ├─ SHAPExplainer  → top-5 features
+                       │            ├─ FaultForecaster → 4× severity 60 s ahead
+                       │            └─ compute_severity() → current severity ×4
+                       └─ StableAlerter  (3-window majority vote + hysteresis)
+
+Why update every row but classify every 10 rows?
+-------------------------------------------------
+The classifier operates on 60-second windows; re-running it every single
+row (1 Hz) would be wasteful — the window changes by only 1 row.  The
+stride of 10 matches what the dataset was built with, so feature
+distributions seen at inference match the training distribution.
+
+The ColdStartChecker, however, runs at 1 Hz because its rules need
+second-level precision (e.g. "coolant was flat for exactly 90 seconds").
+
+Healthy baselines for severity computation
+------------------------------------------
+``compute_severity()`` requires the vehicle's healthy baseline for STFT,
+LTFT, and throttle-to-pedal ratio.  We derive these from the
+StandardScaler that was fitted on healthy training windows: its ``mean_``
+vector is exactly the per-feature healthy mean.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from collections import deque
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+import pandas as pd
+
+from src.config import MODELS_DIR, WINDOW_LENGTH_S, WINDOW_STRIDE_S
+from src.diagnostics.cold_start_checker import ColdStartAlert, ColdStartChecker
+from src.features.extractor import extract_features, feature_names
+from src.features.severity import compute_severity
+from src.models.classifier import ALL_LABELS
+from src.models.explainer import SHAPExplainer
+from src.models.forecaster import FAULT_TYPES, FaultForecaster
+from src.models.stable_alerter import AlertState, StableAlerter
+from src.models.xgb_classifier import load_model as load_xgb_model
+
+log = logging.getLogger(__name__)
+
+
+# ── DashboardState ────────────────────────────────────────────────────────────
+
+
+@dataclass
+class DashboardState:
+    """Single snapshot of everything the dashboard needs to render one frame."""
+
+    elapsed_s: int
+    latest_row: dict[str, float]
+
+    # True once ≥ WINDOW_LENGTH_S rows have accumulated in the buffer.
+    # The dashboard shows "warming up…" until this is True.
+    buffer_ready: bool
+
+    # Last classifier output (updated every WINDOW_STRIDE_S rows)
+    classifier_label: str  # e.g. "fuel_system" or "healthy"
+    classifier_confidence: float  # softmax prob for the predicted class
+    all_class_probs: dict[str, float]  # {label: prob} for all 6 classes
+
+    # Current fault severity in [0, 1] for each of the 4 fault types.
+    # Computed from physics formulas, not the ML model.
+    severities: dict[str, float]  # {fault_type: 0–1}
+
+    # Forecaster output: predicted severity 60 s from now
+    forecasts: dict[str, float]  # {fault_type: 0–1}
+
+    # Temporal voting filter output (ML stream + rule stream)
+    stable_alert: AlertState
+
+    # Rule-engine alerts (kept separately for display)
+    rule_alerts: list  # list[ColdStartAlert]
+
+    # Top SHAP features for the current prediction (list of (name, value) pairs)
+    top_features: list  # list[tuple[str, float]]
+
+
+def _initial_state() -> DashboardState:
+    """Return a blank state used before the first window is ready."""
+    blank_probs = {label: 0.0 for label in ALL_LABELS}
+    blank_probs["healthy"] = 1.0
+    blank_severities = {ft: 0.0 for ft in FAULT_TYPES}
+    blank_alert = AlertState(
+        active=False, fault_type="healthy", confidence=0.0, windows_voted=0
+    )
+    return DashboardState(
+        elapsed_s=0,
+        latest_row={},
+        buffer_ready=False,
+        classifier_label="warming_up",
+        classifier_confidence=0.0,
+        all_class_probs=blank_probs,
+        severities=dict(blank_severities),
+        forecasts=dict(blank_severities),
+        stable_alert=blank_alert,
+        rule_alerts=[],
+        top_features=[],
+    )
+
+
+# ── InferenceEngine ───────────────────────────────────────────────────────────
+
+
+class InferenceEngine:
+    """Stateful per-row inference pipeline.
+
+    Load once per Streamlit session with ``@st.cache_resource`` so the
+    (expensive) SHAP TreeExplainer is built only once.
+
+    Parameters
+    ----------
+    models_dir : Path or None
+        Directory containing ``xgb_classifier_v1.pkl`` and
+        ``forecaster_v1.pkl``.  Defaults to ``src.config.MODELS_DIR``.
+    normalizer_override : Path or None
+        If given, this normaliser replaces the one bundled with the
+        XGBoost model.  Pass the path saved by live_baseline_capture.py
+        for cross-vehicle inference (e.g. Skoda Roomster baseline).
+        The classifier weights are unchanged — only the z-scoring
+        reference distribution changes.
+    """
+
+    def __init__(
+        self,
+        models_dir: Optional[Path] = None,
+        normalizer_override: Optional[Path] = None,
+    ) -> None:
+        models_dir = Path(models_dir or MODELS_DIR)
+
+        log.info("InferenceEngine: loading XGBoost classifier…")
+        clf, norm = load_xgb_model(models_dir)
+        self._clf = clf
+
+        # Swap in the vehicle-specific normaliser if provided.
+        # This is the cross-vehicle generalisation knob: same classifier,
+        # different z-score baseline.
+        if normalizer_override is not None:
+            log.info(
+                "InferenceEngine: loading normaliser override from %s",
+                normalizer_override,
+            )
+            from src.features.normalizer import BaselineNormalizer
+
+            norm = BaselineNormalizer.load(normalizer_override)
+        self._norm = norm
+
+        log.info("InferenceEngine: building SHAP TreeExplainer…")
+        self._explainer = SHAPExplainer(clf)
+
+        log.info("InferenceEngine: loading FaultForecaster…")
+        self._forecaster = FaultForecaster.load(models_dir)
+        # Share the same normalizer between classifier and forecaster.
+        # Critical for cross-vehicle inference (Skoda normalizer_override): without
+        # this, the forecaster still z-scores against the Etios healthy baseline
+        # even when the caller has supplied a vehicle-specific normalizer.
+        self._forecaster._norm = self._norm
+
+        # Derive healthy baselines from the fitted scaler.
+        # Works for both the training scaler and any override scaler because
+        # BaselineNormalizer always stores a StandardScaler internally.
+        feat_cols = feature_names()
+        mean_arr = norm.feature_means
+        self._baselines: dict[str, float] = {
+            feat: float(mean_arr[i]) for i, feat in enumerate(feat_cols)
+        }
+
+        # Per-session stateful components (reset between files)
+        self._cold_start = ColdStartChecker()
+        self._alerter = StableAlerter()
+        self._buffer: deque[dict] = deque(maxlen=WINDOW_LENGTH_S)
+        self._rows_since_window: int = 0
+        self._elapsed_s: int = 0
+        self._last_state: DashboardState = _initial_state()
+        # Tracks which NaN-filled features have already been logged so we warn
+        # once per feature rather than spamming the log every window.
+        self._nan_warned: set[str] = set()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def update(self, row: dict[str, float]) -> DashboardState:
+        """Ingest one row from the streamer and return the updated state.
+
+        Parameters
+        ----------
+        row : dict[str, float]
+            One second of OBD-II sensor readings (the 14 working PIDs).
+
+        Returns
+        -------
+        DashboardState
+            Updated state.  The caller passes this directly to the renderer.
+        """
+        self._elapsed_s += 1
+
+        # ── 1. ColdStartChecker runs at 1 Hz (needs second-level resolution) ──
+        # row.get(key, default) returns NaN (not the default) when the key exists
+        # with a NaN value — e.g. an ECU that doesn't expose that PID.
+        # Replace NaN with safe defaults so the warmup timer doesn't fire false alerts.
+        raw_coolant = row.get("COOLANT_TEMPERATURE", 90.0)
+        raw_rpm = row.get("ENGINE_RPM", 800.0)
+        raw_speed = row.get("VEHICLE_SPEED", 0.0)
+        new_rule_alerts = self._cold_start.update(
+            coolant=90.0 if math.isnan(raw_coolant) else raw_coolant,
+            rpm=800.0 if math.isnan(raw_rpm) else raw_rpm,
+            speed=0.0 if math.isnan(raw_speed) else raw_speed,
+        )
+        for ra in new_rule_alerts:
+            self._alerter.ingest_rule_alert(ra)
+
+        # ── 2. Add row to rolling 60-row buffer ──
+        self._buffer.append(row)
+        self._rows_since_window += 1
+        buffer_ready = len(self._buffer) >= WINDOW_LENGTH_S
+
+        # ── 3. Run window inference every WINDOW_STRIDE_S rows ──
+        if buffer_ready and self._rows_since_window >= WINDOW_STRIDE_S:
+            self._rows_since_window = 0
+            self._last_state = self._run_window(row, buffer_ready)
+        else:
+            # Between windows: update elapsed_s, latest_row, and alert state
+            # (alert state can change on every row via ColdStartChecker updates)
+            prev = self._last_state
+            self._last_state = DashboardState(
+                elapsed_s=self._elapsed_s,
+                latest_row=row,
+                buffer_ready=buffer_ready,
+                classifier_label=prev.classifier_label
+                if buffer_ready
+                else "warming_up",
+                classifier_confidence=prev.classifier_confidence,
+                all_class_probs=prev.all_class_probs,
+                severities=prev.severities,
+                forecasts=prev.forecasts,
+                stable_alert=self._alerter.state,
+                rule_alerts=list(self._alerter.state.rule_alerts),
+                top_features=prev.top_features,
+            )
+
+        return self._last_state
+
+    def reset(self) -> None:
+        """Clear all session state.  Call between CSV files."""
+        self._cold_start.reset()
+        self._alerter.reset()
+        self._buffer.clear()
+        self._rows_since_window = 0
+        self._elapsed_s = 0
+        self._last_state = _initial_state()
+        self._nan_warned.clear()
+
+    @property
+    def current_state(self) -> DashboardState:
+        """Last computed state without consuming a new row."""
+        return self._last_state
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _run_window(self, latest_row: dict, buffer_ready: bool) -> DashboardState:
+        """Run the full ML pipeline on the current 60-row buffer."""
+        window_df = pd.DataFrame(list(self._buffer))
+
+        # Feature extraction
+        feats = extract_features(window_df)
+
+        # NaN-fill: when a PID is unsupported by the ECU its column is all NaN,
+        # which propagates through mean/std/etc. in extract_features.  Substitute
+        # the scaler's healthy mean so the z-score becomes 0 ("no signal → nominal").
+        # Warn once per feature so the user can see which PIDs are missing without
+        # the log being flooded on every window.
+        nan_features = [k for k, v in feats.items() if math.isnan(v)]
+        if nan_features:
+            first_time = [k for k in nan_features if k not in self._nan_warned]
+            if first_time:
+                log.warning(
+                    "NaN features filled with healthy baseline (unsupported PIDs): %s",
+                    first_time,
+                )
+                self._nan_warned.update(first_time)
+            for k in nan_features:
+                feats[k] = self._baselines.get(k, 0.0)
+
+        feats_df = pd.DataFrame([feats])
+
+        # Classification + SHAP (explain_window normalises internally)
+        try:
+            result = self._explainer.explain_window(feats_df, self._norm, top_n=5)
+            label = result["predicted_label"]
+            probs = result["probabilities"]
+            confidence = float(probs[label])
+            top_features = result["top_features"]
+        except Exception as exc:
+            # SHAP failed (e.g. library version mismatch at demo time).
+            # Fall back to raw clf.predict_proba() so the ML prediction is still
+            # correct — only the explanation is lost.  NEVER silently return
+            # "healthy" with 100% confidence here; a real fault would be missed.
+            log.warning("SHAP explain failed (%s) — falling back to clf.predict_proba()", exc)
+            try:
+                from src.features.normalizer import normalised_feature_names as _nfn
+                _fcols = _nfn()
+                X_fb = self._norm.transform(feats_df)[_fcols].to_numpy(dtype=float)
+                proba = self._clf.predict_proba(X_fb)[0]
+                pred_id = int(proba.argmax())
+                label = ALL_LABELS[pred_id]
+                probs = {lbl: float(proba[i]) for i, lbl in enumerate(ALL_LABELS)}
+                confidence = float(proba[pred_id])
+                top_features = []
+            except Exception as exc2:
+                # Both SHAP and clf fallback failed.  Hold the last-known prediction
+                # rather than silently reporting "healthy" — a stale label is safer
+                # than a missed fault during a live Skoda demo.
+                log.error(
+                    "clf.predict_proba fallback also failed (%s) — holding last prediction",
+                    exc2,
+                )
+                prev = self._last_state
+                label = prev.classifier_label
+                probs = prev.all_class_probs
+                confidence = prev.classifier_confidence
+                top_features = prev.top_features
+
+        # Update temporal voting filter
+        self._alerter.update(label, confidence)
+
+        # Current severity (physics formulas)
+        severities: dict[str, float] = {}
+        for fault in FAULT_TYPES:
+            try:
+                severities[fault] = compute_severity(feats, fault, self._baselines)
+            except (ValueError, KeyError):
+                severities[fault] = 0.0
+
+        # Forecasts: predicted severity 60 s from now.
+        # predict_all() normalises once for all 4 fault types instead of 4×.
+        try:
+            forecasts = self._forecaster.predict_all(feats)
+        except Exception:
+            forecasts = {fault: 0.0 for fault in FAULT_TYPES}
+
+        return DashboardState(
+            elapsed_s=self._elapsed_s,
+            latest_row=latest_row,
+            buffer_ready=buffer_ready,
+            classifier_label=label,
+            classifier_confidence=confidence,
+            all_class_probs=probs,
+            severities=severities,
+            forecasts=forecasts,
+            stable_alert=self._alerter.state,
+            rule_alerts=list(self._alerter.state.rule_alerts),
+            top_features=top_features,
+        )

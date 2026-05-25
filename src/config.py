@@ -40,6 +40,12 @@ FORECAST_HORIZON_S = 60
 # Single shared seed. Change this only with reason, and re-run all experiments.
 RANDOM_SEED = 42
 
+# ─── Injection ────────────────────────────────────────────────────────────
+# Gaussian noise σ multiplier applied to all fault injectors.
+# Both dataset_builder and forecast_dataset import this constant so that
+# changing the noise level in one place is reflected everywhere.
+INJECTION_NOISE_STD = 0.3
+
 
 # ─── PID selection ────────────────────────────────────────────────────────
 # The 27 PIDs in carOBD include several that are unusable (constant values,

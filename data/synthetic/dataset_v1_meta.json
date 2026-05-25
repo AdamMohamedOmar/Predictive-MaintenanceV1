@@ -1,0 +1,50 @@
+{
+  "n_samples": 5761,
+  "n_features": 82,
+  "sessions": [
+    "drive1.csv",
+    "live10.csv",
+    "live11.csv",
+    "live12.csv",
+    "live5.csv",
+    "live6.csv",
+    "live7.csv",
+    "live8.csv",
+    "live9.csv"
+  ],
+  "fault_types": [
+    "air_system",
+    "fuel_system",
+    "coolant_temp_sensor",
+    "throttle_position_sensor"
+  ],
+  "label_to_id": {
+    "healthy": 0,
+    "air_system": 1,
+    "fuel_system": 2,
+    "coolant_temp_sensor": 3,
+    "throttle_position_sensor": 4,
+    "cold_start": 5
+  },
+  "class_counts": {
+    "air_system": 991,
+    "cold_start": 183,
+    "coolant_temp_sensor": 991,
+    "fuel_system": 991,
+    "healthy": 1614,
+    "throttle_position_sensor": 991
+  },
+  "injection": {
+    "mode": "ramp",
+    "onset_fraction": 0.4,
+    "ramp_fraction": 0.15,
+    "noise_std": 0.3,
+    "magnitudes": {
+      "air_system": 13.0,
+      "fuel_system": 18.0,
+      "coolant_temp_sensor": 42.0,
+      "throttle_position_sensor": 1.25
+    }
+  },
+  "random_seed": 42
+}

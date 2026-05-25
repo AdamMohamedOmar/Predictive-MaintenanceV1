@@ -34,6 +34,7 @@ pyserial==3.5
 
 # Dashboard
 streamlit==1.38.0
+plotly==5.24.1              # Radial gauges and dark-themed sparklines for diagnostic UI
 
 # Model export
 onnx==1.16.2

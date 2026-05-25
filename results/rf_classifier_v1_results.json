@@ -1,0 +1,83 @@
+{
+  "macro_f1": 1.0,
+  "per_class": {
+    "healthy": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 375.0
+    },
+    "air_system": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 163.0
+    },
+    "fuel_system": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 163.0
+    },
+    "coolant_temp_sensor": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 163.0
+    },
+    "throttle_position_sensor": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 163.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      375,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      163,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      163,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      163,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      163
+    ]
+  ],
+  "label_order": [
+    "healthy",
+    "air_system",
+    "fuel_system",
+    "coolant_temp_sensor",
+    "throttle_position_sensor"
+  ],
+  "test_sessions": [
+    "drive1",
+    "live12"
+  ]
+}

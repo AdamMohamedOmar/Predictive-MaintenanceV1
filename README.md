@@ -7,7 +7,7 @@ A framework that detects and forecasts engine faults from On-Board Diagnostic II
 
 **Two co-equal pillars:**
 
-1. **Fault classification** — given a 60-second window of OBD-II data, classify engine state into one of 6 classes (healthy + 5 fault types).
+1. **Fault classification** — given a 60-second window of OBD-II data, classify engine state into one of 6 classes (healthy, cold_start, air_system, fuel_system, coolant_temp_sensor, throttle_position_sensor).
 2. **Fault forecasting** — given a window of data during a developing fault, predict fault severity 60 seconds ahead.
 
 See [`docs/CHARTER.md`](docs/CHARTER.md) for full scope, methodology, and success criteria.
@@ -45,16 +45,18 @@ If `pytest` passes, the environment is working. You'll see one trivial test pass
 ```
 .
 ├── src/
-│   ├── injection/          # Fault injection engine (Week 2)
-│   ├── features/           # Windowing, splitting, feature extraction (Week 3)
-│   ├── models/             # Classifier and forecaster (Weeks 3-6)
-│   ├── dashboard/          # Streamlit live dashboard (Weeks 4, 7)
+│   ├── injection/          # Fault injection engine
+│   ├── features/           # Windowing, feature extraction, normalisation
+│   ├── models/             # XGBoost classifier, forecasters, SHAP explainer
+│   ├── dashboard/          # Streamlit live dashboard
+│   ├── diagnostics/        # Rule-based cold-start checker
+│   ├── live/               # ELM327 / OBD-II live source
 │   ├── config.py           # Paths, constants
-│   ├── data_loading.py     # carOBD CSV loading
-│   └── obd_live.py         # Live OBD-II reader (Week 6)
+│   └── data_loading.py     # carOBD CSV loading
 ├── tests/                  # pytest suite
 ├── notebooks/              # Jupyter exploration and results
-├── scripts/                # Dataset generation, training entry points
+├── scripts/                # Production entry points (rebuild, train, live tools)
+│   └── investigations/     # Research/tuning experiments (not production)
 ├── docs/                   # Charter, plan, per-week files, results docs
 ├── data/                   # Datasets (gitignored)
 ├── models/                 # Trained model artifacts (gitignored)
@@ -85,10 +87,11 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 
 | Result | Command | Outputs |
 |---|---|---|
-| Generate synthetic dataset | `python scripts/generate_dataset.py` | `data/synthetic/` |
-| Train classifier | `python scripts/train_classifier.py` | `models/xgb_classifier.pkl`, `results/classifier_metrics.json` |
-| Train forecaster | `python scripts/train_forecaster.py` | `models/forecaster_*.pkl`, `results/forecaster_metrics.json` |
-| Run dashboard | `streamlit run src/dashboard/app.py` | Local web UI |
+| Build dataset + train all models | `python scripts/rebuild_all.py` | `data/synthetic/`, `models/`, `results/` |
+| Train forecasters only | `python scripts/train_forecasters.py` | `models/forecaster_v1.pkl`, `results/forecaster_v1_results.json` |
+| Run dashboard (CSV replay) | `streamlit run src/dashboard/app.py` | Local web UI at localhost:8501 |
+| Check live OBD adapter | `python -m scripts.live_discover` | Go/no-go report for ELM327 |
+| Capture Skoda baseline | `python -m scripts.live_baseline_capture --port COM3` | `models/<vehicle>_normalizer.pkl` |
 
 ---
 
@@ -98,17 +101,22 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 - **Vehicle-agnostic features.** All PID statistics are z-scored against the source vehicle's own healthy baseline, enabling cross-vehicle generalization (Etios → Skoda).
 - **Physics-respecting fault injection.** Every injected fault has a primary sensor effect AND a secondary ECU-response effect. See `docs/INJECTION_ENGINE.md` (Week 2 onwards).
 - **Honest framing.** The forecaster is evaluated on injected early-stage faults, not run-to-failure data. Misfire detection is explicitly out of scope (1 Hz OBD-II cannot resolve per-cylinder combustion). See `docs/CHARTER.md` §11.
+- **Two classifiers, one in production.** `src/models/classifier.py` is the Random Forest baseline (Week 3); `src/models/xgb_classifier.py` is the production XGBoost model (Week 4, macro-F1 0.92). Both are kept in the repo so the thesis can report the RF→XGB improvement. The dashboard and live inference load exclusively from `models/xgb_classifier_v1.pkl`. The RF module also provides shared types (`ALL_LABELS`, `_HELD_OUT_SESSIONS`, `session_split`) imported by the XGBoost module.
 
 ---
 
 ## Status
 
-| Week | Status |
-|---|---|
-| 1 | Not started — begins Mon 27 Apr 2026 |
-| 2–8 | Scheduled |
-
-Weekly progress is tracked in `docs/WEEK_XX.md` files.
+| Week | Deliverable | Status |
+|---|---|---|
+| 1 | Config, data loader, project scaffold | ✅ Complete |
+| 2 | Fault injection engine (4 faults, ramp mode) | ✅ Complete |
+| 3 | Feature pipeline, Random Forest baseline | ✅ Complete |
+| 4 | XGBoost classifier (macro-F1 0.92), SHAP explainer | ✅ Complete |
+| 5 | FaultForecaster (4× XGBRegressor, 60 s horizon) | ✅ Complete |
+| 6 | Streamlit dashboard, live ELM327 integration, cross-vehicle baseline | ✅ Complete |
+| 7 | Live Skoda validation, polish | 🔄 In progress |
+| 8 | Thesis write-up, final demo | 📅 Scheduled |
 
 ---
 

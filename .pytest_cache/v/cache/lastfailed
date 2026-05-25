@@ -1,0 +1,4 @@
+{
+  "tests/test_stable_alerter.py::test_alert_requires_same_fault_class": true,
+  "tests/test_stable_alerter.py::test_mixed_windows_do_not_transition": true
+}

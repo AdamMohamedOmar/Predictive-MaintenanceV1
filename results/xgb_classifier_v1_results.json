@@ -1,0 +1,103 @@
+{
+  "macro_f1": 0.9616725298464534,
+  "per_class": {
+    "healthy": {
+      "precision": 0.9607250755287009,
+      "recall": 0.9190751445086706,
+      "f1": 0.9394387001477105,
+      "support": 346.0
+    },
+    "air_system": {
+      "precision": 0.9252336448598131,
+      "recall": 0.9611650485436893,
+      "f1": 0.9428571428571428,
+      "support": 206.0
+    },
+    "fuel_system": {
+      "precision": 0.8933333333333333,
+      "recall": 0.9757281553398058,
+      "f1": 0.9327146171693735,
+      "support": 206.0
+    },
+    "coolant_temp_sensor": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 206.0
+    },
+    "throttle_position_sensor": {
+      "precision": 1.0,
+      "recall": 0.9466019417475728,
+      "f1": 0.972568578553616,
+      "support": 206.0
+    },
+    "cold_start": {
+      "precision": 1.0,
+      "recall": 0.9655172413793104,
+      "f1": 0.9824561403508771,
+      "support": 29.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      318,
+      5,
+      23,
+      0,
+      0,
+      0
+    ],
+    [
+      7,
+      198,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      5,
+      201,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      206,
+      0,
+      0
+    ],
+    [
+      6,
+      5,
+      0,
+      0,
+      195,
+      0
+    ],
+    [
+      0,
+      1,
+      0,
+      0,
+      0,
+      28
+    ]
+  ],
+  "label_order": [
+    "healthy",
+    "air_system",
+    "fuel_system",
+    "coolant_temp_sensor",
+    "throttle_position_sensor",
+    "cold_start"
+  ],
+  "test_sessions": [
+    "drive1",
+    "live12"
+  ]
+}
