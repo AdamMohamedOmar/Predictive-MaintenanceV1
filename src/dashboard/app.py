@@ -747,7 +747,7 @@ def _render_pid_strip(history: deque) -> None:
                 mode="lines",
                 line={"color": line_color, "width": 1.8},
                 fill="tozeroy",
-                fillcolor=line_color + "18",
+                fillcolor=_hex_with_alpha(line_color, 0.094),
             )
         )
         fig.update_xaxes(visible=False, showgrid=False)
@@ -761,13 +761,14 @@ def _render_pid_strip(history: deque) -> None:
         )
 
         with cols[i % 2]:
-            # 2-column nested layout: text left, sparkline right
-            # Both sides use st.container(border=True) for consistent card styling.
-            # Previously the left used a raw <div> wrapper while the right had none —
-            # this produced a half-card with a floating chart beside it.
-            inner_c1, inner_c2 = st.columns([1, 3])
-            with inner_c1:
-                with st.container(border=True):
+            # One bordered card per PID, with two columns *inside* the card:
+            # value/label on the left, sparkline on the right.  Round 1's fix
+            # mistakenly put a border around each sub-column, producing two
+            # disconnected boxes per PID — the docstring above describes one
+            # unified card containing both halves.
+            with st.container(border=True):
+                inner_c1, inner_c2 = st.columns([1, 3])
+                with inner_c1:
                     st.markdown(
                         f'<div style="min-width:110px;padding:4px 0;">'
                         f'<div style="font-family:{FONT_DISPLAY};font-size:9px;'
@@ -781,8 +782,7 @@ def _render_pid_strip(history: deque) -> None:
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-            with inner_c2:
-                with st.container(border=True):
+                with inner_c2:
                     st.plotly_chart(
                         fig,
                         use_container_width=True,
