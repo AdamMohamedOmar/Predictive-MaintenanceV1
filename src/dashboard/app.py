@@ -103,6 +103,18 @@ _FAULT_DISPLAY = {
 }
 
 
+def _hex_with_alpha(hex_color: str, alpha: float) -> str:
+    """Convert '#RRGGBB' + alpha 0–1 → 'rgba(r,g,b,a)'.  Plotly-safe.
+
+    Inline CSS accepts 8-char hex (#RRGGBBAA) but Plotly's color validator
+    does not — only 6-char hex, named colors, rgb(), rgba(), hsl(), hsla().
+    Use this helper for any color that ends up in a Plotly property.
+    """
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha:.3f})"
+
+
 # ── Cached InferenceEngine (expensive: SHAP TreeExplainer built once) ─────────
 
 
@@ -136,6 +148,7 @@ def _init_session_state() -> None:
         "latest_state": None,  # DashboardState | None
         "alert_log": [],  # list[str]  — timestamped event strings
         "last_active_fault": "",  # track transitions for alert log
+        "vehicle_id": "",  # VIN, plate, or shop job number
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -155,6 +168,17 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         f"Session Controls</div>",
         unsafe_allow_html=True,
     )
+
+    # ── Vehicle ID ────────────────────────────────────────────────────────────
+    vehicle_id = st.sidebar.text_input(
+        "VIN / Plate / Job#",
+        value=st.session_state.vehicle_id,
+        max_chars=30,
+        placeholder="e.g. VSSZZZ6KZ7R123456",
+    )
+    st.session_state.vehicle_id = vehicle_id.strip()
+
+    st.sidebar.divider()
 
     # ── Source selector ───────────────────────────────────────────────────────
     source_type = st.sidebar.radio(
@@ -304,12 +328,37 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
             _clear_session_display()
             st.session_state.playing = False
 
-        # Live status indicator
+        # Live status indicator + adapter throughput card
         live_src = st.session_state.live_source
         if live_src is not None and live_src.connected:
             hz = live_src.measured_poll_hz
-            st.sidebar.success(
-                f"Connected — {hz:.1f} Hz | {len(live_src.supported_pids)}/14 PIDs"
+            # Grade adapter throughput:
+            #   >= 0.8 Hz  good — close to 1 Hz training rate
+            #   0.4–0.8    degraded — features will be noisier
+            #   < 0.4 Hz   poor — window feature math is unreliable
+            if hz >= 0.8:
+                hz_color, hz_grade = ACCENT_OK, "GOOD"
+            elif hz >= 0.4:
+                hz_color, hz_grade = ACCENT_WARN, "DEGRADED"
+            else:
+                hz_color, hz_grade = ACCENT_ALERT, "POOR"
+            st.sidebar.markdown(
+                f'<div style="background:{BG_RAISED};border:1px solid {BORDER};'
+                f'border-radius:6px;padding:8px 12px;margin:8px 0;">'
+                f'<div style="font-family:{FONT_DISPLAY};font-size:9px;'
+                f'text-transform:uppercase;letter-spacing:0.1em;color:{TEXT_MUTED};">'
+                f'ADAPTER THROUGHPUT</div>'
+                f'<div style="display:flex;align-items:baseline;gap:8px;">'
+                f'<span style="font-family:{FONT_MONO};font-size:18px;color:{TEXT_PRIMARY};">'
+                f'{hz:.2f} Hz</span>'
+                f'<span style="font-family:{FONT_DISPLAY};font-size:10px;'
+                f'color:{hz_color};letter-spacing:0.08em;">{hz_grade}</span>'
+                f'</div>'
+                f'<div style="font-family:{FONT_BODY};font-size:10px;'
+                f'color:{TEXT_SECONDARY};margin-top:2px;">'
+                f'{len(live_src.supported_pids)}/14 PIDs supported</div>'
+                f'</div>',
+                unsafe_allow_html=True,
             )
             st.sidebar.caption(f"{live_src.elapsed_s} s elapsed")
         elif live_src is not None:
@@ -338,6 +387,15 @@ def _section_header(title: str) -> None:
     )
 
 
+# Iconographic glyph inside the LED square — readable without color perception
+_STATE_GLYPH: dict[str, str] = {
+    ACCENT_OK:    "OK",
+    ACCENT_WARN:  "!",
+    ACCENT_ALERT: "X",
+    ACCENT_INFO:  "~",
+}
+
+
 def _render_status_banner(state: DashboardState) -> None:
     """Full-width 4-lane instrument-cluster status banner.
 
@@ -348,6 +406,69 @@ def _render_status_banner(state: DashboardState) -> None:
     alert = state.stable_alert
 
     # ── Determine state category ────────────────────────────────────────────
+    # Data quality failure takes precedence — don't display a diagnosis on garbage data
+    if not state.data_quality_ok:
+        viols = state.data_quality_violations
+        accent = ACCENT_ALERT
+        title = "SENSOR DATA INVALID"
+        subtitle_txt = "; ".join(viols[:2])
+        if len(viols) > 2:
+            subtitle_txt += f"  (+{len(viols) - 2} more)"
+        stat1_lbl, stat1_val = "VIOLATIONS", str(len(viols))
+        stat2_lbl, stat2_val = "STATUS", "HELD"
+        stat3_lbl, stat3_val = "REGIME", "—"
+
+        def _stat(label: str, value: str) -> str:
+            return (
+                f'<div style="display:flex;flex-direction:column;gap:2px;">'
+                f'<span style="font-family:{FONT_DISPLAY};font-size:9px;text-transform:uppercase;'
+                f'letter-spacing:0.12em;color:{TEXT_MUTED};">{label}</span>'
+                f'<span style="font-family:{FONT_MONO};font-size:18px;font-weight:700;'
+                f'color:{TEXT_PRIMARY};line-height:1;">{value}</span>'
+                f"</div>"
+            )
+
+        elapsed_html = (
+            f'<div style="text-align:right;min-width:96px;">'
+            f'<div style="font-family:{FONT_DISPLAY};font-size:9px;text-transform:uppercase;'
+            f'letter-spacing:0.12em;color:{TEXT_MUTED};">SESSION TIME</div>'
+            f'<div style="font-family:{FONT_MONO};font-size:26px;font-weight:700;'
+            f'color:{TEXT_PRIMARY};line-height:1.1;">{state.elapsed_s:04d} s</div>'
+            f"</div>"
+        )
+        dq_banner = f"""
+<div style="
+    background-color:{BG_SURFACE};border:1px solid {BORDER};
+    border-radius:8px;overflow:hidden;margin-bottom:16px;">
+  <div style="height:3px;background:{accent};box-shadow:0 0 20px {accent}60;"></div>
+  <div style="display:grid;grid-template-columns:52px 1fr auto auto;
+              align-items:center;gap:20px;padding:16px 20px;">
+    <div style="width:40px;height:40px;background:{accent};border-radius:6px;
+                box-shadow:0 0 24px {accent}40;flex-shrink:0;
+                display:flex;align-items:center;justify-content:center;
+                font-family:{FONT_MONO};color:white;font-size:14px;font-weight:700;">
+      {_STATE_GLYPH.get(accent, '?')}</div>
+    <div>
+      <div style="font-family:{FONT_DISPLAY};font-size:20px;font-weight:700;
+                  text-transform:uppercase;letter-spacing:0.05em;
+                  color:{accent};">{title}</div>
+      <div style="font-family:{FONT_BODY};font-size:12px;color:{TEXT_SECONDARY};
+                  margin-top:3px;">{subtitle_txt}</div>
+    </div>
+    <div style="display:flex;gap:28px;">
+      {_stat(stat1_lbl, stat1_val)}
+      {_stat(stat2_lbl, stat2_val)}
+      {_stat(stat3_lbl, stat3_val)}
+    </div>
+    {elapsed_html}
+  </div>
+</div>"""
+        # Collapse blank lines — CommonMark ends an HTML block at any blank line,
+        # which would cause the remainder to render as literal text.
+        dq_banner = "".join(line for line in dq_banner.splitlines() if line.strip())
+        st.markdown(dq_banner, unsafe_allow_html=True)
+        return
+
     if not state.buffer_ready:
         accent = ACCENT_INFO
         title = "WARMING UP"
@@ -356,11 +477,12 @@ def _render_status_banner(state: DashboardState) -> None:
         stat2_lbl, stat2_val = "TARGET", "60 s"
         stat3_lbl, stat3_val = "REGIME", "—"
     elif alert.active:
+        from src.diagnostics.dtc_map import get_dtc
+        dtc = get_dtc(alert.fault_type)
         accent = ACCENT_ALERT
-        fault = alert.fault_type.replace("_", " ").upper()
-        title = f"FAULT — {fault}"
+        title = f"{dtc['code']} — {dtc['name'].upper()}"
         subtitle = f"{alert.windows_voted} windows confirmed · majority vote passed"
-        stat1_lbl, stat1_val = "CONFIDENCE", f"{alert.confidence:.0%}"
+        stat1_lbl, stat1_val = "MODEL AGMT", f"{alert.confidence:.0%}"
         stat2_lbl, stat2_val = "WINDOWS", f"{alert.windows_voted}/3"
         # Pull current severity for the active fault if available
         sev = state.severities.get(alert.fault_type, 0.0)
@@ -435,14 +557,16 @@ def _render_status_banner(state: DashboardState) -> None:
     gap:20px;
     padding:16px 20px;
   ">
-    <!-- LED square -->
+    <!-- LED square with iconographic glyph for color-blind accessibility -->
     <div style="
       width:40px;height:40px;
       background:{accent};
       border-radius:6px;
       box-shadow:0 0 24px {accent}40;
       flex-shrink:0;
-    "></div>
+      display:flex;align-items:center;justify-content:center;
+      font-family:{FONT_MONO};color:white;font-size:14px;font-weight:700;
+    ">{_STATE_GLYPH.get(accent, '?')}</div>
 
     <!-- Title / subtitle -->
     <div>
@@ -465,6 +589,9 @@ def _render_status_banner(state: DashboardState) -> None:
   </div>
 </div>
 """
+    # Collapse blank lines — CommonMark ends an HTML block at any blank line,
+    # which causes the remainder to render as literal source text rather than HTML.
+    banner_html = "".join(line for line in banner_html.splitlines() if line.strip())
     st.markdown(banner_html, unsafe_allow_html=True)
 
 
@@ -519,9 +646,9 @@ def _render_severity_grid(state: DashboardState) -> None:
                     "bgcolor": BG_RAISED,
                     "borderwidth": 0,
                     "steps": [
-                        {"range": [0, 30], "color": ACCENT_OK + "18"},
-                        {"range": [30, 60], "color": ACCENT_WARN + "18"},
-                        {"range": [60, 100], "color": ACCENT_ALERT + "18"},
+                        {"range": [0, 30],   "color": _hex_with_alpha(ACCENT_OK,    0.094)},
+                        {"range": [30, 60],  "color": _hex_with_alpha(ACCENT_WARN,  0.094)},
+                        {"range": [60, 100], "color": _hex_with_alpha(ACCENT_ALERT, 0.094)},
                     ],
                     # Forecast marker — cyan needle shows where we'll be in 60 s
                     "threshold": {
@@ -634,34 +761,33 @@ def _render_pid_strip(history: deque) -> None:
         )
 
         with cols[i % 2]:
-            # Card: left value block + right sparkline side by side
-            left_block = (
-                f'<div style="min-width:110px;padding-right:12px;">'
-                f'<div style="font-family:{FONT_DISPLAY};font-size:9px;'
-                f"text-transform:uppercase;letter-spacing:0.1em;"
-                f'color:{TEXT_MUTED};">{label}</div>'
-                f'<div style="font-family:{FONT_MONO};font-size:28px;'
-                f'font-weight:700;color:{TEXT_PRIMARY};line-height:1.1;">'
-                f"{val_str}</div>"
-                f'<div style="font-family:{FONT_BODY};font-size:10px;'
-                f'color:{TEXT_SECONDARY};">{unit}</div>'
-                f"</div>"
-            )
-            # Use a 2-column nested layout: text left, chart right
+            # 2-column nested layout: text left, sparkline right
+            # Both sides use st.container(border=True) for consistent card styling.
+            # Previously the left used a raw <div> wrapper while the right had none —
+            # this produced a half-card with a floating chart beside it.
             inner_c1, inner_c2 = st.columns([1, 3])
             with inner_c1:
-                st.markdown(
-                    f'<div style="background:{BG_SURFACE};border:1px solid {BORDER};'
-                    f"border-radius:8px;padding:12px 12px 8px 16px;height:96px;"
-                    f'display:flex;align-items:center;">{left_block}</div>',
-                    unsafe_allow_html=True,
-                )
+                with st.container(border=True):
+                    st.markdown(
+                        f'<div style="min-width:110px;padding:4px 0;">'
+                        f'<div style="font-family:{FONT_DISPLAY};font-size:9px;'
+                        f"text-transform:uppercase;letter-spacing:0.1em;"
+                        f'color:{TEXT_MUTED};">{label}</div>'
+                        f'<div style="font-family:{FONT_MONO};font-size:28px;'
+                        f'font-weight:700;color:{TEXT_PRIMARY};line-height:1.1;">'
+                        f"{val_str}</div>"
+                        f'<div style="font-family:{FONT_BODY};font-size:10px;'
+                        f'color:{TEXT_SECONDARY};">{unit}</div>'
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
             with inner_c2:
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                    config={"displayModeBar": False},
-                )
+                with st.container(border=True):
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
 
 
 def _render_alert_log(log_entries: list) -> None:
@@ -731,6 +857,42 @@ def _render_alert_log(log_entries: list) -> None:
     )
 
 
+_FEATURE_NAME_MAP: dict[str, str] = {
+    "LONG_TERM_FUEL_TRIM_BANK_1__mean":  "LTFT B1 avg",
+    "LONG_TERM_FUEL_TRIM_BANK_1__max":   "LTFT B1 peak",
+    "LONG_TERM_FUEL_TRIM_BANK_1__delta": "LTFT B1 change",
+    "LONG_TERM_FUEL_TRIM_BANK_1__std":   "LTFT B1 jitter",
+    "SHORT_TERM_FUEL_TRIM_BANK_1__mean": "STFT B1 avg",
+    "SHORT_TERM_FUEL_TRIM_BANK_1__std":  "STFT B1 jitter",
+    "COOLANT_TEMPERATURE__mean":         "Coolant avg",
+    "COOLANT_TEMPERATURE__delta":        "Coolant change",
+    "INTAKE_MANIFOLD_PRESSURE__mean":    "MAP avg",
+    "THROTTLE_TO_PEDAL_RATIO":           "TPS vs pedal",
+    "MAP_PER_THROTTLE":                  "MAP / throttle",
+    "FUEL_TRIM_DIVERGENCE":              "LTFT - STFT",
+    "COOLANT_WARMUP_RATE":               "Warm-up rate",
+    "RPM_IDLE_DRIFT":                    "Idle RPM jitter",
+    "TIMING_VS_TEMP":                    "Timing deviation",
+    "FUEL_LOOP_ACTIVE":                  "Closed loop",
+    "ENGINE_RPM__mean":                  "RPM avg",
+    "ENGINE_RPM__std":                   "RPM jitter",
+    "THROTTLE__mean":                    "Throttle avg",
+    "VEHICLE_SPEED__mean":               "Speed avg",
+    "ENGINE_LOAD__mean":                 "Engine load avg",
+    "TIMING_ADVANCE__mean":              "Timing advance",
+    "INTAKE_AIR_TEMPERATURE__mean":      "Intake air temp",
+    "CONTROL_MODULE_VOLTAGE__mean":      "Module voltage",
+}
+
+
+def _humanize_feature(raw_name: str) -> str:
+    """Convert a raw feature column name to a workshop-readable label."""
+    base = raw_name.replace("__z", "")
+    if base in _FEATURE_NAME_MAP:
+        return _FEATURE_NAME_MAP[base]
+    return base.replace("__", " ").replace("_", " ").title()
+
+
 def _render_shap_panel(state: DashboardState) -> None:
     """Dark horizontal SHAP bar chart with title strip and outside-bar labels."""
     import plotly.graph_objects as go
@@ -754,15 +916,12 @@ def _render_shap_panel(state: DashboardState) -> None:
         f'<span style="color:{TEXT_PRIMARY};">{label_display}</span>'
         f"&nbsp;·&nbsp;"
         f'<span style="color:{ACCENT_DATA};font-family:{FONT_MONO};">'
-        f"{state.classifier_confidence:.0%} CONFIDENCE</span>"
+        f"{state.classifier_confidence:.0%} MODEL AGREEMENT</span>"
         f"</div>",
         unsafe_allow_html=True,
     )
 
-    names = [
-        f[0].replace("__z", "").replace("__", " ").replace("_", " ").title()
-        for f in state.top_features
-    ]
+    names = [_humanize_feature(f[0]) for f in state.top_features]
     values = [f[1] for f in state.top_features]
 
     # Sort by absolute SHAP value descending, orient horizontal
@@ -801,11 +960,11 @@ def _render_shap_panel(state: DashboardState) -> None:
         showlegend=False,
     )
 
-    st.markdown(
-        f'<div class="panel-card" style="padding:12px 16px;">', unsafe_allow_html=True
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown("</div>", unsafe_allow_html=True)
+    # st.container(border=True) provides a real wrapper that survives Streamlit's
+    # render cycle — unlike st.markdown('<div>') which is auto-closed before the
+    # chart renders, leaving the chart outside the card entirely.
+    with st.container(border=True):
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ── Alert log helpers ─────────────────────────────────────────────────────────
@@ -853,6 +1012,51 @@ def _clear_session_display() -> None:
     st.session_state.last_active_fault = ""
 
 
+# ── Recommendations panel ─────────────────────────────────────────────────────
+
+
+def _render_recommendations(state: DashboardState) -> None:
+    """Workshop-style ordered checklist for the active fault.
+
+    Only renders when there is a confirmed alert — positioned as the
+    "what now?" call-to-action below the SHAP panel.
+    """
+    if not state.stable_alert.active:
+        return
+
+    from src.diagnostics.recommendations import get_steps
+    from src.diagnostics.dtc_map import get_dtc
+
+    fault = state.stable_alert.fault_type
+    steps = get_steps(fault)
+    if not steps:
+        return
+    dtc = get_dtc(fault)
+
+    rows_html = ""
+    for i, step in enumerate(steps, start=1):
+        rows_html += (
+            f'<div style="display:grid;grid-template-columns:24px 1fr;'
+            f'gap:10px;padding:6px 0;border-bottom:1px solid {BORDER};">'
+            f'<span style="font-family:{FONT_MONO};color:{ACCENT_DATA};'
+            f'font-size:12px;font-weight:700;">{i:02d}</span>'
+            f'<span style="font-family:{FONT_BODY};color:{TEXT_PRIMARY};'
+            f'font-size:13px;line-height:1.4;">{step}</span>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div class="panel-card" style="padding:12px 16px;margin-top:12px;">'
+        f'<div style="font-family:{FONT_DISPLAY};font-size:11px;'
+        f'text-transform:uppercase;letter-spacing:0.1em;'
+        f'color:{TEXT_SECONDARY};margin-bottom:10px;">'
+        f'DIAGNOSTIC STEPS &middot; {dtc["short"].upper()}</div>'
+        f'{rows_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -874,6 +1078,13 @@ def main() -> None:
             "to train the classifier and forecasters."
         )
         return
+
+    # Warn when ≥ 3 PIDs are NaN-filled — classifier confidence is degraded
+    if engine.degraded_pid_count >= 3:
+        st.warning(
+            f"WARNING: {engine.degraded_pid_count} PIDs unsupported by this ECU — "
+            f"classifier confidence is degraded. Run with a vehicle that supports all 14 PIDs."
+        )
 
     # ── Advance one row (if playing) ──────────────────────────────────────────
     source = (
@@ -924,6 +1135,9 @@ def main() -> None:
         with col_shap:
             _section_header("Top SHAP Features")
             _render_shap_panel(state)
+
+        # Workshop diagnostic steps — only shown when a fault is confirmed
+        _render_recommendations(state)
 
         # Elapsed time — custom mono readout (avoids default metric chrome)
         st.sidebar.markdown(
