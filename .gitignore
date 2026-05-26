@@ -1,0 +1,33 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Local environment / secrets
+.env
+.env.local
