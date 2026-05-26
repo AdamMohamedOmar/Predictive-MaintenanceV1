@@ -51,7 +51,7 @@ from src.features.regime import detect_regime, regime_one_hot
 _EPS = 1e-3
 
 
-def extract_features(window: pd.DataFrame) -> dict[str, float]:
+def extract_features(window: pd.DataFrame, sample_hz: float = 1.0) -> dict[str, float]:
     """Return a flat feature dict for one 60-row OBD-II window.
 
     Parameters
@@ -59,6 +59,12 @@ def extract_features(window: pd.DataFrame) -> dict[str, float]:
     window : pd.DataFrame
         A single window slice produced by ``sliding_windows``.
         Must contain all columns in ``USEFUL_PIDS``.
+    sample_hz : float
+        Actual ECU poll rate for this session.  Training data is 1 Hz;
+        live ELM327 on older ECUs may deliver 0.1–0.5 Hz.  Rate-of-change
+        features (COOLANT_WARMUP_RATE, FUEL_LOOP_ACTIVE) are computed in
+        physical time units, so they must know the real sample rate.
+        Pass 1.0 for training/CSV replay (the carOBD dataset default).
 
     Returns
     -------
