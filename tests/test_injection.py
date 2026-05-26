@@ -272,6 +272,54 @@ def test_tps_commanded_throttle_unchanged():
     )
 
 
+# ─── T5.6 idle-weight air injection ─────────────────────────────────────────
+
+def test_air_system_map_delta_larger_at_low_load():
+    """MAP injection must be larger at low load than at high load (idle-weighted)."""
+    rng = np.random.default_rng(1)
+    n = 200
+
+    # Low-load session: ENGINE_LOAD ~15 % → idle_weight ≈ 0.75
+    df_low = pd.DataFrame({
+        "ENGINE_RPM":                   rng.uniform(800, 1000, n),
+        "VEHICLE_SPEED":                np.zeros(n),
+        "THROTTLE":                     rng.uniform(3, 8, n),
+        "ENGINE_LOAD":                  rng.uniform(10, 20, n),
+        "COOLANT_TEMPERATURE":          rng.uniform(88, 92, n),
+        "LONG_TERM_FUEL_TRIM_BANK_1":   np.zeros(n),
+        "SHORT_TERM_FUEL_TRIM_BANK_1":  np.zeros(n),
+        "INTAKE_MANIFOLD_PRESSURE":     rng.uniform(25, 35, n),
+        "ABSOLUTE_BAROMETRIC_PRESSURE": np.full(n, 101.0),
+        "ACCELERATOR_PEDAL_POSITION_D": rng.uniform(2, 8, n),
+        "ACCELERATOR_PEDAL_POSITION_E": rng.uniform(2, 8, n),
+        "COMMANDED_THROTTLE_ACTUATOR":  rng.uniform(3, 8, n),
+        "INTAKE_AIR_TEMPERATURE":       rng.uniform(28, 32, n),
+        "TIMING_ADVANCE":               rng.uniform(10, 15, n),
+        "CONTROL_MODULE_VOLTAGE":       rng.uniform(13.8, 14.2, n),
+    })
+
+    # High-load session: ENGINE_LOAD ~70 % → idle_weight ≈ 0.3 (clamped minimum)
+    df_high = df_low.copy()
+    df_high["ENGINE_LOAD"] = rng.uniform(65, 75, n)
+    df_high["THROTTLE"]    = rng.uniform(55, 70, n)
+
+    params = InjectionParams(
+        fault_type="air_system", onset_idx=0, ramp_len=1,
+        magnitude=13.0, noise_std=0.0, random_seed=42,
+    )
+
+    out_low  = inject_fault(df_low,  params)
+    out_high = inject_fault(df_high, params)
+
+    mean_delta_low  = (out_low["INTAKE_MANIFOLD_PRESSURE"]  - df_low["INTAKE_MANIFOLD_PRESSURE"]).mean()
+    mean_delta_high = (out_high["INTAKE_MANIFOLD_PRESSURE"] - df_high["INTAKE_MANIFOLD_PRESSURE"]).mean()
+
+    assert mean_delta_low > mean_delta_high, (
+        f"Idle-weight not working: low-load MAP delta ({mean_delta_low:.2f} kPa) "
+        f"should exceed high-load MAP delta ({mean_delta_high:.2f} kPa)."
+    )
+
+
 # ─── Integration with real data ──────────────────────────────────────────────
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="carOBD data not present")

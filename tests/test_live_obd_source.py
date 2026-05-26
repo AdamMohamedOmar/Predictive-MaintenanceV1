@@ -270,3 +270,42 @@ def test_reset_drains_queue(mock_conn):
     src.stop()
     src.reset()
     assert src.next_row() is None
+
+
+# ── T3.4: RPM liveness check on reconnect ────────────────────────────────────
+
+def test_try_reconnect_returns_false_when_engine_not_running():
+    """_try_reconnect() must refuse a connection where ENGINE_RPM < 50 (ACC mode).
+
+    T3.4 fix: _verify_engine_running() is called from _try_reconnect() just as
+    it is from connect(), so a post-Bluetooth-drop reconnect with the ignition
+    in ACC is rejected before garbage rows reach the classifier.
+    """
+    dead_response = _make_response(0.0)  # RPM = 0 → engine off
+    instance = _mock_obd_instance()
+    instance.query.return_value = dead_response
+
+    with patch("src.live.obd_source.obd.OBD", return_value=instance):
+        src = LiveObdSource(port="COM3")
+        # Prime _supported_pids so _verify_engine_running() finds ENGINE_RPM
+        src._supported_pids = list(USEFUL_PIDS)
+        src._conn = instance
+        result = src._try_reconnect()
+
+    assert result is False
+    assert src.connected is False
+
+
+def test_try_reconnect_returns_true_when_engine_running():
+    """_try_reconnect() succeeds when ENGINE_RPM ≥ 50."""
+    live_response = _make_response(850.0)  # RPM = 850 → engine running
+    instance = _mock_obd_instance()
+    instance.query.return_value = live_response
+
+    with patch("src.live.obd_source.obd.OBD", return_value=instance):
+        src = LiveObdSource(port="COM3")
+        src._conn = instance
+        result = src._try_reconnect()
+
+    assert result is True
+    assert src.connected is True

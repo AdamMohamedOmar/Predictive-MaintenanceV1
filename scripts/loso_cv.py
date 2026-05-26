@@ -23,7 +23,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.features.dataset_builder import load_dataset
 from src.models.xgb_classifier import train as train_clf, evaluate as eval_clf
-from src.features.normalizer import BaselineNormalizer
 
 ds = load_dataset()
 sessions = sorted(ds["session_id"].unique())
@@ -35,7 +34,6 @@ for held in sessions:
     train_df = ds[ds["session_id"] != held]
     test_df  = ds[ds["session_id"] == held]
 
-    norm = BaselineNormalizer().fit(train_df)
     clf, norm_trained = train_clf(train_df, n_estimators=300, random_seed=42)
     res = eval_clf(clf, norm_trained, test_df)
     f1 = res["macro_f1"]

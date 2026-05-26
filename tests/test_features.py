@@ -86,12 +86,21 @@ def test_sliding_windows_too_short_yields_nothing():
 def test_extract_features_returns_correct_count():
     df = _make_session(60)
     feats = extract_features(df)
-    expected = 14 * 5 + 3 + 4 + 5  # 70 PID stats + 3 cross-PID + 4 trajectory + 5 regime = 82
+    expected = 14 * 5 + 4 + 4 + 5  # 70 PID stats + 4 cross-PID + 4 trajectory + 5 regime = 83
     assert len(feats) == expected
 
 
 def test_feature_names_length():
-    assert len(feature_names()) == 82  # 70 PID stats + 3 cross-PID + 4 trajectory + 5 regime
+    assert len(feature_names()) == 83  # 70 PID stats + 4 cross-PID + 4 trajectory + 5 regime
+
+
+def test_throttle_cmd_actual_delta_near_zero_when_equal():
+    """When THROTTLE ≈ COMMANDED_THROTTLE_ACTUATOR the delta should be ~0."""
+    df = _make_session(60)
+    df["THROTTLE"] = 20.0
+    df["COMMANDED_THROTTLE_ACTUATOR"] = 20.0
+    feats = extract_features(df)
+    assert abs(feats["THROTTLE_CMD_ACTUAL_DELTA"]) < 0.1
 
 
 def test_feature_names_matches_extract_keys():

@@ -77,7 +77,77 @@ def check_row(row: dict[str, float]) -> QualityVerdict:
                 f"physically impossible (engine off while moving)"
             )
 
+    # Cross-PID rule: MAP cannot exceed barometric on a naturally-aspirated engine.
+    # +5 kPa tolerance for sensor noise and altitude variation.
+    map_val = row.get("INTAKE_MANIFOLD_PRESSURE")
+    baro = row.get("ABSOLUTE_BAROMETRIC_PRESSURE", 105.0)  # Skoda at sea-level fallback
+    if map_val is not None and not (isinstance(map_val, float) and math.isnan(map_val)):
+        if map_val > baro + 5:
+            violations.append(f"MAP={map_val:.1f} > BARO={baro:.1f}+5 (NA engine)")
+
+    # Cross-PID rule: throttle actual vs commanded > 30 % = hardware fault, not wear.
+    # (Slow TPS potentiometer wear is handled by the ML classifier, not sanity checks.)
+    thr = row.get("THROTTLE")
+    cmd = row.get("COMMANDED_THROTTLE_ACTUATOR")
+    if thr is not None and cmd is not None:
+        both_ok = not any(isinstance(v, float) and math.isnan(v) for v in (thr, cmd))
+        if both_ok and abs(thr - cmd) > 30:
+            violations.append(
+                f"THROTTLE={thr:.0f} but COMMANDED_THROTTLE_ACTUATOR={cmd:.0f} "
+                f"(delta {abs(thr - cmd):.0f}% > 30% — hardware fault)"
+            )
+
     if violations:
         log.warning("Sanity violations in OBD row: %s", violations)
 
     return QualityVerdict(ok=len(violations) == 0, violations=violations)
+
+
+class RowSanityChecker:
+    """Stateful wrapper around check_row() that adds cross-row coolant-rate check.
+
+    Coolant temperature cannot change faster than ~1 °C/s due to thermal inertia.
+    A jump of > 5 °C/s is a sensor glitch, not a real thermal event.  The stateless
+    check_row() cannot detect this because it only sees one row at a time — this class
+    remembers the previous row's coolant value and timestamp.
+
+    Usage
+    -----
+        checker = RowSanityChecker()
+        verdict = checker.check(row, now=time.monotonic())
+    """
+
+    def __init__(self) -> None:
+        self._prev_coolant: float | None = None
+        self._prev_t: float | None = None
+
+    def check(self, row: dict[str, float], now: float) -> QualityVerdict:
+        """Run stateless + coolant-rate check; return combined verdict."""
+        verdict = check_row(row)
+
+        c = row.get("COOLANT_TEMPERATURE")
+        if (
+            c is not None
+            and not (isinstance(c, float) and math.isnan(c))
+            and self._prev_coolant is not None
+            and self._prev_t is not None
+        ):
+            dt = max(now - self._prev_t, 1e-3)
+            rate = abs(c - self._prev_coolant) / dt
+            if rate > 1.0:  # > 1 °C/s violates thermal inertia — CLAUDE.md physics rule
+                msg = (
+                    f"Coolant jumped {c - self._prev_coolant:+.1f}°C in {dt:.1f}s "
+                    f"({rate:.1f}°C/s > 1.0 limit)"
+                )
+                verdict.violations.append(msg)
+                verdict.ok = False
+                log.warning("Sanity violation (coolant rate): %s", msg)
+
+        self._prev_coolant = c
+        self._prev_t = now
+        return verdict
+
+    def reset(self) -> None:
+        """Clear previous-row state — call between sessions."""
+        self._prev_coolant = None
+        self._prev_t = None

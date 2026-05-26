@@ -61,6 +61,7 @@ def process_captured_rows(
     rows: list[dict],
     vehicle_name: str = "unknown",
     supported_pids: Optional[list[str]] = None,
+    poll_hz: float = 1.0,
 ) -> tuple[BaselineNormalizer, dict]:
     """Fit a BaselineNormalizer from a list of raw OBD sensor rows.
 
@@ -75,6 +76,12 @@ def process_captured_rows(
         Free-text label stored in the sidecar JSON (e.g. "Skoda Roomster 2007").
     supported_pids : list[str] or None
         PIDs the ECU exposed.  Used only for metadata; does not affect fitting.
+    poll_hz : float
+        Actual measured poll rate from the adapter (e.g. 0.3 for a slow Skoda
+        ELM327).  Passed to ``extract_features`` so that rate-dependent features
+        (COOLANT_WARMUP_RATE, FUEL_LOOP_ACTIVE) are calibrated on the correct
+        time axis.  After T3.1 (1-Hz resampler in LiveObdSource), this should
+        always be 1.0 because rows are resampled before reaching this function.
 
     Returns
     -------
@@ -118,7 +125,7 @@ def process_captured_rows(
     pid_cols = [p for p in USEFUL_PIDS if p in df.columns]
     feature_rows: list[dict] = []
     for window, _ in sliding_windows(df[pid_cols], label="healthy"):
-        feats = extract_features(window)
+        feats = extract_features(window, sample_hz=poll_hz)
         feature_rows.append(feats)
 
     # ── Guard 3: enough windows ───────────────────────────────────────────────
@@ -229,6 +236,7 @@ def run_capture(
             rows,
             vehicle_name=vehicle_name,
             supported_pids=src.supported_pids,
+            poll_hz=src.measured_poll_hz or 1.0,
         )
     except ValueError as exc:
         print(f"\n[FAIL] Guard check failed:\n  {exc}")

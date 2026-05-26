@@ -201,22 +201,30 @@ def _inject_air_system(
         else np.full(len(df), _BARO_FALLBACK)
     )
 
-    map_delta = ramp * magnitude_kpa + noise(0.3)
+    # Idle-weight: vacuum leaks are a larger fraction of total airflow at
+    # idle than at wide-open-throttle.  Scale the injection toward 100 % at
+    # low load and clamp to 30 % minimum so the fault is still visible at WOT.
+    load = df["ENGINE_LOAD"].to_numpy(dtype=float)
+    idle_weight = np.clip(1.0 - load / 60.0, 0.3, 1.0)
+
+    map_delta = ramp * magnitude_kpa * idle_weight + noise(0.3)
     df["INTAKE_MANIFOLD_PRESSURE"] = np.clip(
         df["INTAKE_MANIFOLD_PRESSURE"].to_numpy(dtype=float) + map_delta,
         a_min=0.0,
         a_max=baro,
     )
 
-    # STFT lean-correction: approximately 0.8× the effective air-excess signal
-    stft_delta = ramp * magnitude_kpa * 0.8 + noise(0.5)
+    # STFT lean-correction: approximately 0.8× the effective air-excess signal.
+    # Also idle-weighted — the trim response is proportional to the actual leak.
+    stft_delta = ramp * magnitude_kpa * idle_weight * 0.8 + noise(0.5)
     df["SHORT_TERM_FUEL_TRIM_BANK_1"] = np.clip(
         df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_delta,
         -_STFT_MAX,
         _STFT_MAX,
     )
 
-    # LTFT: slow integrator — reaches ~40 % of STFT magnitude at full ramp
+    # LTFT: slow integrator — reaches ~40 % of STFT magnitude at full ramp.
+    # Not idle-weighted (LTFT integrates the STFT history, smoothing the weight).
     ltft_delta = ramp * magnitude_kpa * 0.32 + noise(0.1)
     df["LONG_TERM_FUEL_TRIM_BANK_1"] = np.clip(
         df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta,
@@ -226,7 +234,7 @@ def _inject_air_system(
 
     # ENGINE_LOAD: extra unmetered air means the engine is doing more work than
     # the ECU believes — load reading rises slightly (~30 % of MAP delta in %)
-    load_delta = ramp * magnitude_kpa * 0.3 + noise(0.2)
+    load_delta = ramp * magnitude_kpa * idle_weight * 0.3 + noise(0.2)
     df["ENGINE_LOAD"] = np.clip(
         df["ENGINE_LOAD"].to_numpy(dtype=float) + load_delta,
         0.0,

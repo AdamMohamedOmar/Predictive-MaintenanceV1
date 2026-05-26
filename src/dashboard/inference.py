@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -202,24 +203,70 @@ class InferenceEngine:
         self._nan_warned: set[str] = set()
         # Actual ECU poll rate — 1.0 for CSV replay (carOBD is 1 Hz); updated
         # each live tick via set_sample_hz() so rate-dependent features are correct.
+        # After T3.1 the resampler ensures the buffer always sees 1-Hz rows,
+        # so set_sample_hz() is called with 1.0 from app.py post-resampling.
         self._sample_hz: float = 1.0
+        # T3.1 resampler: tracks the next 1-second tick boundary (monotonic).
+        # None until the first live row arrives (CSV rows have no __t key).
+        self._next_sample_t: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def update(self, row: dict[str, float]) -> DashboardState:
-        """Ingest one row from the streamer and return the updated state.
+        """Ingest one raw row and return the updated state.
+
+        Live path (row carries ``__t = time.monotonic()``):
+            Rows are resampled to exactly 1-per-second using hold-last
+            semantics.  A fast adapter (> 1 Hz) drops extra rows; a slow
+            adapter (< 1 Hz) replays the last row at each missed 1-second
+            slot so the 60-row buffer stays time-aligned with training data.
+
+        CSV path (no ``__t`` key):
+            Passes straight through to ``_process_one_row()`` — identical
+            behaviour to the pre-T3.1 code path.
 
         Parameters
         ----------
         row : dict[str, float]
-            One second of OBD-II sensor readings (the 14 working PIDs).
+            OBD-II sensor readings.  Live rows include ``__t`` (wall-clock
+            float); CSV rows do not.
 
         Returns
         -------
         DashboardState
-            Updated state.  The caller passes this directly to the renderer.
+            Most-recent computed state.
+        """
+        t = row.pop("__t", None)
+
+        if t is not None:
+            # ── Live path: resample to 1-Hz ───────────────────────────────
+            if self._next_sample_t is None:
+                self._next_sample_t = t  # anchor to first row's timestamp
+
+            if t < self._next_sample_t:
+                # Row arrived faster than 1 Hz — drop it.
+                return self._last_state
+
+            # Hold-last semantics: if the adapter is slow (< 1 Hz), the same
+            # row fills every missed 1-second slot so the buffer length in
+            # rows always equals elapsed seconds.
+            while t >= self._next_sample_t:
+                self._next_sample_t += 1.0
+                self._process_one_row(row)
+
+            return self._last_state
+
+        # ── CSV path: no resampling needed ────────────────────────────────
+        self._process_one_row(row)
+        return self._last_state
+
+    def _process_one_row(self, row: dict[str, float]) -> None:
+        """Core per-row pipeline — called by update() after resampling.
+
+        Mutates ``self._last_state`` in place so the resampler loop can call
+        it 0–N times per incoming raw row without extra plumbing.
         """
         self._elapsed_s += 1
 
@@ -245,7 +292,7 @@ class InferenceEngine:
                 data_quality_ok=False,
                 data_quality_violations=verdict.violations,
             )
-            return self._last_state
+            return
 
         # ── 1. ColdStartChecker runs at 1 Hz (needs second-level resolution) ──
         # row.get(key, default) returns NaN (not the default) when the key exists
@@ -260,6 +307,7 @@ class InferenceEngine:
             rpm=800.0 if math.isnan(raw_rpm) else raw_rpm,
             speed=0.0 if math.isnan(raw_speed) else raw_speed,
             voltage=14.0 if math.isnan(raw_voltage) else raw_voltage,
+            now=time.monotonic(),
         )
         for ra in new_rule_alerts:
             self._alerter.ingest_rule_alert(ra)
@@ -295,8 +343,6 @@ class InferenceEngine:
                 data_quality_violations=[],
             )
 
-        return self._last_state
-
     def reset(self) -> None:
         """Clear all session state.  Call between CSV files."""
         self._cold_start.reset()
@@ -306,6 +352,7 @@ class InferenceEngine:
         self._elapsed_s = 0
         self._last_state = _initial_state()
         self._nan_warned.clear()
+        self._next_sample_t = None  # T3.1: restart resampler clock on session change
 
     def set_sample_hz(self, hz: float) -> None:
         """Update the ECU poll rate used by rate-dependent features.
@@ -313,8 +360,16 @@ class InferenceEngine:
         Call once per live tick (before update()) so COOLANT_WARMUP_RATE and
         FUEL_LOOP_ACTIVE stay calibrated as the adapter's measured throughput
         changes.  No-op for CSV replay (default 1.0 Hz is correct for carOBD).
+
+        ``hz < 0.1`` means the adapter has not completed its first tick yet
+        (``measured_poll_hz`` returns 0.0 on the first connect).  Treat this
+        as "not yet known" and keep the previous value (1.0 default) rather
+        than clipping to 0.05 Hz and producing wildly wrong time-axis features
+        on the very first window.
         """
-        import numpy as np  # already imported at module level via extract_features
+        if hz < 0.1:
+            return  # adapter has not completed a tick yet — keep previous value
+        import numpy as np
         self._sample_hz = float(np.clip(hz, 0.05, 5.0))
 
     @property

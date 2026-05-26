@@ -139,27 +139,11 @@ class LiveObdSource:
         if self._conn.status() == OBDStatus.CAR_CONNECTED:
             self._supported_pids = self._discover_pids()
 
-            # Verify the ECU is returning live data, not just confirming the bus.
-            # Cheap clones report CAR_CONNECTED in ACC-only key position; the ECU
-            # then returns null on every query.  ENGINE_RPM < 50 means ignition is
-            # not in RUN mode or the ECU is not yet awake.
-            if "ENGINE_RPM" in self._supported_pids:
-                import math
-                try:
-                    resp = self._conn.query(PID_MAP["ENGINE_RPM"])
-                    rpm = to_float(resp)
-                    if math.isnan(rpm) or rpm < 50:
-                        log.warning(
-                            "ELM327 connected but ENGINE_RPM=%s — ignition in ACC, "
-                            "or ECU not awake yet. Start the engine before connecting.",
-                            rpm,
-                        )
-                        self._connected = False
-                        return False
-                except Exception as exc:
-                    log.warning("ENGINE_RPM liveness check failed: %s", exc)
-                    self._connected = False
-                    return False
+            # Verify the engine is actually running before accepting the connection.
+            # Cheap clones report CAR_CONNECTED in ACC-only key position.
+            if not self._verify_engine_running():
+                self._connected = False
+                return False
 
             self._connected = True
             log.info(
@@ -299,6 +283,35 @@ class LiveObdSource:
                 pass
         return supported
 
+    def _verify_engine_running(self) -> bool:
+        """Return True only if ENGINE_RPM is ≥ 50 (engine actually running).
+
+        Guards against cheap ELM327 clones that report CAR_CONNECTED in
+        ACC-only key position — the ECU responds to the bus but returns null
+        or near-zero RPM because the engine is not running.  Shared by
+        connect() and _try_reconnect() so both paths get the same check.
+
+        Returns True when ENGINE_RPM is not in the supported PID list
+        (cannot verify, so we allow the connection to proceed).
+        """
+        if "ENGINE_RPM" not in self._supported_pids:
+            return True  # ECU doesn't expose RPM — can't verify either way
+        import math
+        try:
+            resp = self._conn.query(PID_MAP["ENGINE_RPM"])
+            rpm = to_float(resp)
+            if math.isnan(rpm) or rpm < 50:
+                log.warning(
+                    "ENGINE_RPM=%s — ignition not in RUN mode or ECU not awake. "
+                    "Start the engine before connecting.",
+                    rpm,
+                )
+                return False
+        except Exception as exc:
+            log.warning("ENGINE_RPM liveness check failed: %s", exc)
+            return False
+        return True
+
     def _try_reconnect(self) -> bool:
         """Attempt reconnection from within the poll thread."""
         log.info("OBD poll: attempting reconnect…")
@@ -311,6 +324,11 @@ class LiveObdSource:
             self._conn = obd.OBD(portstr=self._port, fast=False, timeout=5.0)
             if self._conn.status() == OBDStatus.CAR_CONNECTED:
                 self._supported_pids = self._discover_pids()
+                # Same RPM liveness guard as connect() — avoids feeding garbage
+                # into the classifier after a Bluetooth drop in ACC-mode ECUs.
+                if not self._verify_engine_running():
+                    self._connected = False
+                    return False
                 self._connected = True
                 log.info("OBD reconnected. Supported PIDs: %d", len(self._supported_pids))
                 return True
@@ -348,6 +366,12 @@ class LiveObdSource:
             for pid_name in USEFUL_PIDS:
                 if pid_name not in row:
                     row[pid_name] = float("nan")
+
+            # Attach wall-clock timestamp so InferenceEngine can resample to
+            # exactly 1 row/second regardless of raw adapter poll rate.
+            # CsvStreamer rows do NOT carry __t — that's how the engine
+            # distinguishes live from CSV path (None → CSV, float → live).
+            row["__t"] = time.monotonic()
 
             # Push latest row; drop previous if consumer hasn't read it yet
             if self._queue.full():

@@ -5,8 +5,9 @@ For each of the 14 working PIDs we compute 5 statistical aggregates:
 
 That gives 70 base features (5 × 14 = 70).
 
-Cross-PID ratio features (3):
-  THROTTLE_TO_PEDAL_RATIO, MAP_PER_THROTTLE, FUEL_TRIM_DIVERGENCE
+Cross-PID ratio features (4):
+  THROTTLE_TO_PEDAL_RATIO, MAP_PER_THROTTLE, FUEL_TRIM_DIVERGENCE,
+  THROTTLE_CMD_ACTUAL_DELTA
 
 Trajectory features (4) — capture *how fast things are changing*, not
 just the current snapshot.  These are the key to distinguishing a cold
@@ -34,7 +35,7 @@ Regime one-hot features (5):
   REGIME__COLD_START, REGIME__WARMUP, REGIME__IDLE, REGIME__ACCEL,
   REGIME__CRUISE — exactly one is 1.0 per window.
 
-Total: 70 + 3 + 4 + 5 = 82 features per window.
+Total: 70 + 4 + 4 + 5 = 83 features per window.
 
 Output is a plain Python dict of {feature_name: float}.
 """
@@ -117,6 +118,19 @@ def extract_features(window: pd.DataFrame, sample_hz: float = 1.0) -> dict[str, 
 
     features["FUEL_TRIM_DIVERGENCE"] = ltft_mean - stft_mean
 
+    # THROTTLE_CMD_ACTUAL_DELTA: mean(actual − commanded) at open-throttle rows.
+    # A TPS potentiometer fault causes THROTTLE to over-read vs COMMANDED_THROTTLE_ACTUATOR.
+    # This is a second, independent TPS fault signal alongside THROTTLE_TO_PEDAL_RATIO
+    # — combining both in severity gives better SNR than either alone.
+    commanded_arr = window["COMMANDED_THROTTLE_ACTUATOR"].to_numpy(dtype=float)
+    cmd_open_mask = commanded_arr > 5.0
+    if cmd_open_mask.any():
+        features["THROTTLE_CMD_ACTUAL_DELTA"] = float(
+            np.mean(throttle_arr[cmd_open_mask] - commanded_arr[cmd_open_mask])
+        )
+    else:
+        features["THROTTLE_CMD_ACTUAL_DELTA"] = 0.0
+
     # Trajectory features — rate-of-change signals for cold-start diagnostics
     coolant = window["COOLANT_TEMPERATURE"].to_numpy(dtype=float)
     n = len(coolant)
@@ -165,6 +179,7 @@ def feature_names() -> list[str]:
         "THROTTLE_TO_PEDAL_RATIO",
         "MAP_PER_THROTTLE",
         "FUEL_TRIM_DIVERGENCE",
+        "THROTTLE_CMD_ACTUAL_DELTA",
         "COOLANT_WARMUP_RATE",
         "FUEL_LOOP_ACTIVE",
         "RPM_IDLE_DRIFT",

@@ -16,7 +16,7 @@ RECOMMENDATIONS: dict[str, list[str]] = {
     "fuel_system": [
         "Measure fuel rail pressure key-on (spec: 300-400 kPa nominal).",
         "Inspect fuel filter — replace if > 50k km since last change.",
-        "Pull DTCs — confirm P0171 or P0172. If misfire codes present, suspect injector clog instead.",
+        "Pull DTCs — confirm P0171 (lean, Bank 1) and/or P0087 (low rail pressure). If misfire codes present, suspect injector clog instead.",
         "Run injector balance test if pressure is in spec.",
     ],
     "coolant_temp_sensor": [

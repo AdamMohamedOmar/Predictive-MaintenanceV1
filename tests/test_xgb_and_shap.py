@@ -47,15 +47,24 @@ def test_normalizer_adds_z_columns():
 
 
 def test_normalizer_feature_count():
-    assert len(normalised_feature_names()) == 82  # 82 z-scored only (73 base + 4 trajectory + 5 regime); raw features dropped
+    assert len(normalised_feature_names()) == 83  # 83 z-scored only (78 continuous + 5 regime passthrough)
 
 
 def test_normalizer_healthy_mean_z_near_zero():
-    """After fitting on healthy windows, healthy z-scores should average ≈ 0."""
+    """After fitting on healthy windows, healthy z-scores should average ≈ 0.
+
+    Regime one-hot __z columns are binary passthrough (not z-scored), so their
+    means are whatever fraction of healthy windows are in each regime — excluded
+    from this check.  Only continuous features are expected to average near 0.
+    """
+    from src.features.regime import regime_feature_names
+    regime_z = {f"{c}__z" for c in regime_feature_names()}
+
     ds = _make_dataset()
     norm = BaselineNormalizer()
     out = norm.fit_transform(ds)
-    healthy_z = out[out["label"] == "healthy"][[f"{c}__z" for c in _FEAT_COLS]]
+    continuous_z_cols = [f"{c}__z" for c in _FEAT_COLS if f"{c}__z" not in regime_z]
+    healthy_z = out[out["label"] == "healthy"][continuous_z_cols]
     assert healthy_z.mean().abs().max() < 0.1
 
 

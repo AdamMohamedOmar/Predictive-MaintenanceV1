@@ -125,8 +125,17 @@ def compute_severity(
         delta = ratio - ratio_base
         if delta < _TPS_DEADBAND:
             return 0.0
-        # Map the post-deadband range [DEADBAND, DEADBAND+SCALE] → [0, 1]
-        return float(np.clip((delta - _TPS_DEADBAND) / _TPS_SCALE, 0.0, 1.0))
+        # Term 1: throttle-to-pedal ratio drift (primary TPS indicator)
+        ratio_term = np.clip((delta - _TPS_DEADBAND) / _TPS_SCALE, 0.0, 1.0)
+
+        # Term 2: commanded-vs-actual throttle gap (secondary TPS indicator).
+        # THROTTLE_CMD_ACTUAL_DELTA > 10 % gap → full severity contribution.
+        # This term is independent of the pedal sensor, so the two terms are
+        # complementary: one is noisy when the car is coasting, the other is not.
+        cmd_delta = features.get("THROTTLE_CMD_ACTUAL_DELTA", 0.0)
+        cmd_term = float(np.clip(cmd_delta / 10.0, 0.0, 1.0))
+
+        return float(np.clip(0.5 * ratio_term + 0.5 * cmd_term, 0.0, 1.0))
 
     raise ValueError(f"Unknown fault_type: {fault_type!r}")
 

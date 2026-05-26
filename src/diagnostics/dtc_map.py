@@ -17,13 +17,14 @@ DTC_MAP: dict[str, dict[str, str]] = {
         ),
     },
     "fuel_system": {
-        "code": "P0172",
-        "name": "Chronic Lean Bias / Low Fuel Pressure",
-        "short": "Rich Bias",
+        "code": "P0171 / P0087",
+        "name": "Lean Mixture + Low Fuel Pressure",
+        "short": "Lean+Fuel",
         "description": (
             "ECU has biased LTFT chronically positive — fuel delivery is "
-            "below demand. Most common cause: clogged fuel filter, "
-            "weak fuel pump, or stuck-closed pressure regulator."
+            "below demand. P0171 = Bank 1 lean (LTFT compensation exhausted); "
+            "P0087 = fuel rail pressure too low. Most common cause: clogged "
+            "fuel filter, weak fuel pump, or stuck-closed pressure regulator."
         ),
     },
     "coolant_temp_sensor": {
@@ -37,11 +38,12 @@ DTC_MAP: dict[str, dict[str, str]] = {
         ),
     },
     "throttle_position_sensor": {
-        "code": "P0122",
-        "name": "Throttle Position Sensor Circuit Low Input",
-        "short": "TPS Low",
+        "code": "P2135",
+        "name": "Throttle Position Sensor A/B Correlation",
+        "short": "TPS Corr",
         "description": (
-            "Reported throttle angle diverges from pedal command. "
+            "Reported throttle angle diverges from pedal command — "
+            "TPS-A and TPS-B signals disagree beyond tolerance. "
             "Most common cause: worn TPS resistive track, "
             "harness contamination, or contaminated throttle body."
         ),

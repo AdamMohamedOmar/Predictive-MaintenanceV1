@@ -109,6 +109,10 @@ class ColdStartChecker:
         self._voltage_buf: list[float] = []  # CONTROL_MODULE_VOLTAGE
 
         self._elapsed_s: int = 0
+        # Wall-clock anchor set on the first update() call that provides `now`.
+        # When the caller passes now=time.monotonic(), _elapsed_s is derived
+        # from real seconds rather than row count — critical at sub-1 Hz polls.
+        self._session_start_t: Optional[float] = None
         self._warm_since_s: Optional[int] = None  # when coolant first hit target
         self._dormant: bool = False               # True once all checks have cleared
 
@@ -123,6 +127,8 @@ class ColdStartChecker:
         rpm: float,
         speed: float,
         voltage: float = 14.0,
+        *,
+        now: Optional[float] = None,
     ) -> list[ColdStartAlert]:
         """Ingest one second of sensor data and return any new alerts.
 
@@ -132,6 +138,13 @@ class ColdStartChecker:
         rpm : float       ENGINE_RPM
         speed : float     VEHICLE_SPEED in km/h
         voltage : float   CONTROL_MODULE_VOLTAGE in V (default 14.0 when absent)
+        now : float or None
+            Wall-clock time from ``time.monotonic()``.  When provided, elapsed
+            seconds are derived from real time rather than row count.  Pass
+            ``now=time.monotonic()`` from live code so sub-1 Hz polling does
+            not compress the timer (at 0.3 Hz, row-counting makes "90 s of
+            frozen ECT" fire after only 30 real seconds).  Omit in tests and
+            CSV replay — the legacy ``_elapsed_s += 1`` fallback is used.
 
         Returns
         -------
@@ -144,7 +157,13 @@ class ColdStartChecker:
         self._rpm_buf.append(rpm)
         self._speed_buf.append(speed)
         self._voltage_buf.append(voltage)
-        self._elapsed_s += 1
+
+        if now is not None:
+            if self._session_start_t is None:
+                self._session_start_t = now
+            self._elapsed_s = int(now - self._session_start_t)
+        else:
+            self._elapsed_s += 1  # legacy fallback for 1 Hz CSV / tests
 
         # Track when engine first reached operating temperature
         if self._warm_since_s is None and coolant >= _WARMUP_TARGET_TEMP:
@@ -203,6 +222,7 @@ class ColdStartChecker:
         self._speed_buf.clear()
         self._voltage_buf.clear()
         self._elapsed_s = 0
+        self._session_start_t = None
         self._warm_since_s = None
         self._dormant = False
         self._fired.clear()

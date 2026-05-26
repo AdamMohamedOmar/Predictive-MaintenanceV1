@@ -1079,8 +1079,9 @@ def main() -> None:
         )
         return
 
-    # Warn when ≥ 3 PIDs are NaN-filled — classifier confidence is degraded
-    if engine.degraded_pid_count >= 3:
+    # Warn as soon as any PID is NaN-filled — one missing PID already degrades
+    # all cross-PID ratio features (THROTTLE_TO_PEDAL_RATIO, MAP_PER_THROTTLE).
+    if engine.degraded_pid_count >= 1:
         st.warning(
             f"WARNING: {engine.degraded_pid_count} PIDs unsupported by this ECU — "
             f"classifier confidence is degraded. Run with a vehicle that supports all 14 PIDs."
@@ -1106,11 +1107,22 @@ def main() -> None:
                 st.rerun()
                 return
         else:
-            # Keep feature extractor's time-axis calibrated to the actual adapter
-            # poll rate.  ELM327 on a 2007 Skoda ECU delivers 0.1–0.5 Hz, not the
-            # 1 Hz training rate — without this, COOLANT_WARMUP_RATE reads 3× high.
+            # T3.1: InferenceEngine now resamples live rows to 1 Hz before
+            # feeding the 60-row buffer, so features are always computed on a
+            # 1-second time axis regardless of raw adapter poll rate.
+            # Keep set_sample_hz(1.0) so the rate-dependent features
+            # (COOLANT_WARMUP_RATE, FUEL_LOOP_ACTIVE) use the correct axis.
+            # Warn the user if the adapter is too slow to resample reliably.
             if st.session_state.source_type == "live" and source is not None:
-                engine.set_sample_hz(getattr(source, "measured_poll_hz", 1.0))
+                poll_hz = getattr(source, "measured_poll_hz", 0.0)
+                engine.set_sample_hz(1.0)  # resampler guarantees 1-Hz downstream
+                if 0 < poll_hz < 0.3:
+                    st.error(
+                        "Adapter poll rate {:.2f} Hz is below the 0.3 Hz floor — "
+                        "hold-last resampling fills the window with near-identical "
+                        "rows and std features collapse to zero. "
+                        "Use a faster ELM327 adapter.".format(poll_hz)
+                    )
             state = engine.update(row)
             st.session_state.latest_state = state
             st.session_state.pid_history.append(row)

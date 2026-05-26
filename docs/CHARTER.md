@@ -160,7 +160,12 @@ The baseline-normalization step is what makes cross-vehicle generalization possi
 
 ### 7.5 Evaluation protocol
 
-- Session-level 5-fold cross-validation, with fold assignment fixed and committed to the repository before any results are reported.
+Cross-validation is reported two ways:
+
+- **(a) Fixed session-level holdout** — `{drive1, live12}` held out; the remaining 7 sessions train the model. Used by `scripts/rebuild_all.py` to produce the deployed artefacts and the headline F1 number.
+- **(b) Leave-one-session-out (LOSO)** — all 9 usable sessions iterated; each held out in turn. Executed by `scripts/loso_cv.py`. Reports mean ± std macro-F1 as the honest generalisation estimate with error bars. The thesis must report both (a) and (b).
+
+Additional evaluation items:
 - Per-class precision, recall, and F1, plus macro-F1 and a confusion matrix.
 - For the forecaster: MAE, RMSE, and a calibration plot of predicted vs. actual severity on held-out ramped injections.
 
