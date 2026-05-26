@@ -120,14 +120,18 @@ def extract_features(window: pd.DataFrame, sample_hz: float = 1.0) -> dict[str, 
     # Trajectory features — rate-of-change signals for cold-start diagnostics
     coolant = window["COOLANT_TEMPERATURE"].to_numpy(dtype=float)
     n = len(coolant)
-    # Slope in °C/min via linear regression over the 60-s window
-    t = np.arange(n, dtype=float)
-    slope = float(np.polyfit(t, coolant, 1)[0]) * 60.0  # convert /s → /min
-    features["COOLANT_WARMUP_RATE"] = slope
+    # Row indices → real seconds.  At 1 Hz row i = i seconds; at 0.3 Hz row i = i/0.3 s.
+    # Without this correction, a 0.3 Hz stream reads warmup rate 3.3× too high.
+    t_sec = np.arange(n, dtype=float) / max(sample_hz, 1e-3)
+    slope_per_sec = float(np.polyfit(t_sec, coolant, 1)[0])
+    features["COOLANT_WARMUP_RATE"] = slope_per_sec * 60.0  # convert °C/s → °C/min
 
     stft = window["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float)
     active_rows = int(np.sum(np.abs(stft) > 0.5))
-    features["FUEL_LOOP_ACTIVE"] = 1.0 if active_rows >= 10 else 0.0
+    # Threshold is 10 *seconds* of closed-loop activity, not 10 rows.
+    # At 0.3 Hz, 10 rows = 33 s — too strict, flag would never fire on Skoda.
+    threshold_rows = max(3, int(round(10.0 * sample_hz)))
+    features["FUEL_LOOP_ACTIVE"] = 1.0 if active_rows >= threshold_rows else 0.0
 
     speed = window["VEHICLE_SPEED"].to_numpy(dtype=float)
     idle_mask = speed < 2.0

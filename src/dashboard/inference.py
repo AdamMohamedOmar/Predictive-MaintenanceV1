@@ -200,6 +200,9 @@ class InferenceEngine:
         # Tracks which NaN-filled features have already been logged so we warn
         # once per feature rather than spamming the log every window.
         self._nan_warned: set[str] = set()
+        # Actual ECU poll rate — 1.0 for CSV replay (carOBD is 1 Hz); updated
+        # each live tick via set_sample_hz() so rate-dependent features are correct.
+        self._sample_hz: float = 1.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -304,6 +307,16 @@ class InferenceEngine:
         self._last_state = _initial_state()
         self._nan_warned.clear()
 
+    def set_sample_hz(self, hz: float) -> None:
+        """Update the ECU poll rate used by rate-dependent features.
+
+        Call once per live tick (before update()) so COOLANT_WARMUP_RATE and
+        FUEL_LOOP_ACTIVE stay calibrated as the adapter's measured throughput
+        changes.  No-op for CSV replay (default 1.0 Hz is correct for carOBD).
+        """
+        import numpy as np  # already imported at module level via extract_features
+        self._sample_hz = float(np.clip(hz, 0.05, 5.0))
+
     @property
     def current_state(self) -> DashboardState:
         """Last computed state without consuming a new row."""
@@ -328,8 +341,8 @@ class InferenceEngine:
         """Run the full ML pipeline on the current 60-row buffer."""
         window_df = pd.DataFrame(list(self._buffer))
 
-        # Feature extraction
-        feats = extract_features(window_df)
+        # Feature extraction — pass real poll rate so time-axis features are correct
+        feats = extract_features(window_df, sample_hz=self._sample_hz)
 
         # NaN-fill: when a PID is unsupported by the ECU its column is all NaN,
         # which propagates through mean/std/etc. in extract_features.  Substitute

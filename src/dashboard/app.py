@@ -1106,6 +1106,11 @@ def main() -> None:
                 st.rerun()
                 return
         else:
+            # Keep feature extractor's time-axis calibrated to the actual adapter
+            # poll rate.  ELM327 on a 2007 Skoda ECU delivers 0.1–0.5 Hz, not the
+            # 1 Hz training rate — without this, COOLANT_WARMUP_RATE reads 3× high.
+            if st.session_state.source_type == "live" and source is not None:
+                engine.set_sample_hz(getattr(source, "measured_poll_hz", 1.0))
             state = engine.update(row)
             st.session_state.latest_state = state
             st.session_state.pid_history.append(row)

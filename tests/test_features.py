@@ -131,6 +131,31 @@ def test_map_per_throttle_safe_when_throttle_zero():
     assert np.isfinite(feats["MAP_PER_THROTTLE"])
 
 
+def test_warmup_rate_scales_with_sample_hz():
+    """At 0.5 Hz the same row-sequence takes twice as long → slope is half."""
+    df = _make_session(60)
+    # Impose a clear linear coolant rise so polyfit has a strong signal
+    df["COOLANT_TEMPERATURE"] = np.linspace(60.0, 80.0, 60)
+    feats_1hz = extract_features(df, sample_hz=1.0)
+    feats_05hz = extract_features(df, sample_hz=0.5)
+    # Half the sample rate → real time is doubled → °C/min rate is halved
+    assert feats_05hz["COOLANT_WARMUP_RATE"] == pytest.approx(
+        feats_1hz["COOLANT_WARMUP_RATE"] / 2.0, rel=0.01
+    )
+
+
+def test_fuel_loop_threshold_scales_with_sample_hz():
+    """FUEL_LOOP_ACTIVE threshold is 10 *seconds* of activity, not 10 rows."""
+    df = _make_session(60)
+    # Exactly 5 rows have |STFT| > 0.5 %
+    df["SHORT_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    df.loc[df.index[:5], "SHORT_TERM_FUEL_TRIM_BANK_1"] = 1.0
+    # At 1 Hz: threshold_rows = max(3, round(10*1.0)) = 10 → 5 < 10 → should NOT fire
+    assert extract_features(df, sample_hz=1.0)["FUEL_LOOP_ACTIVE"] == 0.0
+    # At 0.5 Hz: threshold_rows = max(3, round(10*0.5)) = 5 → 5 >= 5 → should fire
+    assert extract_features(df, sample_hz=0.5)["FUEL_LOOP_ACTIVE"] == 1.0
+
+
 # ─── Dataset builder ──────────────────────────────────────────────────────────
 
 def test_label_to_id_covers_all_faults():
