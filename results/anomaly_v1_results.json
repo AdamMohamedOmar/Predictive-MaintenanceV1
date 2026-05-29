@@ -1,0 +1,59 @@
+{
+  "n_train_healthy": 1268,
+  "n_test_healthy": 346,
+  "n_test_fault": 853,
+  "test_healthy_mean_score": 0.675097246515031,
+  "test_healthy_p95_score": 1.0,
+  "test_fault_mean_score": 0.8397472428529966,
+  "test_fault_p5_score": 0.45173594117323346,
+  "score_separation": 0.16464999633796562,
+  "test_auc_healthy_vs_any_fault": 0.7161378744858338,
+  "per_class": {
+    "air_system": {
+      "n": 206,
+      "mean_score": 0.7798477210489638,
+      "p50_score": 0.8192242586952962,
+      "p95_score": 1.0
+    },
+    "cold_start": {
+      "n": 29,
+      "mean_score": 1.0,
+      "p50_score": 1.0,
+      "p95_score": 1.0
+    },
+    "coolant_temp_sensor": {
+      "n": 206,
+      "mean_score": 0.9425950640434987,
+      "p50_score": 1.0,
+      "p95_score": 1.0
+    },
+    "fuel_system": {
+      "n": 206,
+      "mean_score": 0.721698339276914,
+      "p50_score": 0.7480514220079755,
+      "p95_score": 1.0
+    },
+    "healthy": {
+      "n": 346,
+      "mean_score": 0.675097246515031,
+      "p50_score": 0.6579582771899877,
+      "p95_score": 1.0
+    },
+    "throttle_position_sensor": {
+      "n": 206,
+      "mean_score": 0.8922879928811381,
+      "p50_score": 0.9559168796683764,
+      "p95_score": 1.0
+    }
+  },
+  "mock_fixture": {
+    "n_windows": 55,
+    "n_pre_bias": 20,
+    "n_post_bias": 35,
+    "pre_bias_mean_score": 0.7069149735380849,
+    "post_bias_mean_score": 0.6029966158878098,
+    "auc": 0.37,
+    "note": "Plumbing AUC, not detection AUC. The mock fixture biases the same PIDs the injector biases (see data/real_faults/README.md). Real-fault AUC will be computed against Skoda data per docs/REAL_FAULT_COLLECTION.md."
+  },
+  "note": "Not real-fault validation. The fault windows come from the same injector that the classifier trains on; a clean separation here proves the detector wires up, not that it detects real faults. Real-fault validation pending data per docs/REAL_FAULT_COLLECTION.md."
+}

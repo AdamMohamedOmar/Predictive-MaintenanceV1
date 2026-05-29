@@ -1,0 +1,8 @@
+This directory is reserved for optional parity recordings on a junkyard
+Toyota Etios — e.g. swapping in a known-bad ECT sensor on the donor car
+to capture an Etios-side ground-truth fault signature for the paper's
+cross-vehicle section. Empty in this commit; population is contingent on
+finding a donor Etios.
+
+Filename convention follows data/real_faults/README.md, with `etios_`
+prefix instead of `skoda_`.

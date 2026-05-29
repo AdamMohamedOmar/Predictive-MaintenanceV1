@@ -71,17 +71,18 @@ All dependencies are exact-pinned. Do not change versions without explicit discu
 
 ---
 
-## Fault Taxonomy (5 Classes)
+## Fault Taxonomy (6 Classes — 4 injectable faults + 2 regimes)
 
-| Class ID | Label | Primary PIDs | Mechanical Root Cause |
-|---|---|---|---|
-| 0 | `healthy` | All 14 PIDs nominal | No fault |
-| 1 | `air_system` | `INTAKE_MANIFOLD_PRESSURE`, `STFT`, `LTFT` | Vacuum leak or MAF drift; extra unmetered air enters after MAF |
-| 2 | `fuel_system` | `LTFT` (sustained high), `STFT` | Injector clog or low rail pressure; ECU compensates with chronic positive trim |
-| 3 | `coolant_temp_sensor` | `COOLANT_TEMPERATURE`, `TIMING_ADVANCE`, `INTAKE_AIR_TEMPERATURE` | Stuck/biased ECT sensor; ECU believes engine is perpetually cold |
-| 4 | `throttle_position_sensor` | `THROTTLE` vs `ACCELERATOR_PEDAL_POSITION_D` ratio | TPS potentiometer wear; reported angle diverges from actual pedal position |
+| Class ID | Label | Type | Primary PIDs | Mechanical / Regime Description |
+|---|---|---|---|---|
+| 0 | `healthy` | Regime | All 14 PIDs nominal | No fault |
+| 1 | `air_system` | Fault | `INTAKE_MANIFOLD_PRESSURE`, `STFT`, `LTFT` | Vacuum leak or MAF drift; extra unmetered air enters after MAF |
+| 2 | `fuel_system` | Fault | `LTFT` (sustained high), `STFT` | Injector clog or low rail pressure; ECU compensates with chronic positive trim |
+| 3 | `coolant_temp_sensor` | Fault | `COOLANT_TEMPERATURE`, `TIMING_ADVANCE`, `INTAKE_AIR_TEMPERATURE` | Stuck/biased ECT sensor; ECU believes engine is perpetually cold |
+| 4 | `throttle_position_sensor` | Fault | `THROTTLE` vs `ACCELERATOR_PEDAL_POSITION_D` ratio | TPS potentiometer wear; reported angle diverges from actual pedal position |
+| 5 | `cold_start` | Regime | `COOLANT_TEMPERATURE` (< 55 °C, rising), enriched fuel trims, retarded timing | Engine warming up from cold ambient; not a fault — the classifier learns this regime separately to avoid mis-attributing warm-up enrichment to a fuel-system fault. Not injected. |
 
-**Dropped from charter:** Oxygen sensor fault — `FUEL_AIR_COMMANDED_EQUIV_RATIO` is always 0 on this ECU, making injection unverifiable.
+**Oxygen sensor fault** was dropped from the taxonomy in charter v1.2 (29 May 2026). `FUEL_AIR_COMMANDED_EQUIV_RATIO` is always-zero on the Etios ECU (see `docs/DATA_NOTES.md`), making the primary signature unobservable; synthetic injection cannot be verified. The deployment slot is reassigned to `cold_start`. Full justification in `docs/CHARTER.md` §6.
 
 ---
 

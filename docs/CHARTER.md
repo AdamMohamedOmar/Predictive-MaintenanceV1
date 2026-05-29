@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.1 |
-| **Date** | 24 April 2026 |
+| **Version** | 1.2 |
+| **Date** | 29 May 2026 |
 | **Authors** | Adam, Ahmed |
 | **Deadline** | 15 June 2026 |
 | **Priority Level** | 2.5 — Equal effort on classification and forecasting |
@@ -110,18 +110,20 @@ Macro-F1 is reported in preference to accuracy because the synthetic dataset wil
 
 ## 6. Fault Taxonomy
 
-The classifier and forecaster operate over six classes. Each is grounded in an identifiable physical mechanism and a clear OBD-II signature.
+The classifier operates over **six classes**: four injectable faults, a healthy state, and one regime class (cold_start) the classifier learns separately so it does not mis-attribute warm-up enrichment to a fuel-system fault.
 
-| Class | Mechanism | Primary PID signature |
-|---|---|---|
-| Healthy | Nominal operation | All PIDs within vehicle-specific baseline |
-| Air system fault | MAF drift or intake vacuum leak | Intake manifold pressure, long-term fuel trim |
-| Oxygen sensor fault | Stuck or biased O₂ sensor | Short-term fuel trim, fuel–air equivalence ratio |
-| Fuel system fault | Injector clogging or fuel pressure drop | Long-term fuel trim, short-term fuel trim (both biased) |
-| Coolant temperature sensor fault | Stuck or drifting ECT sensor | Coolant temperature, timing advance |
-| Throttle position sensor fault | TPS drift | Throttle position vs. accelerator pedal position mismatch |
+| Class | Type | Mechanism | Primary PID signature |
+|---|---|---|---|
+| Healthy | Regime | Nominal operation | All PIDs within vehicle-specific baseline |
+| Cold start | Regime | Engine warming up from a cold ambient start | Coolant temperature rising from < 55 °C, enriched fuel trims, retarded timing (all natural for the regime) |
+| Air system fault | Fault | MAF drift or intake vacuum leak | Intake manifold pressure, long-term fuel trim |
+| Fuel system fault | Fault | Injector clogging or fuel pressure drop | Long-term fuel trim, short-term fuel trim (both biased) |
+| Coolant temperature sensor fault | Fault | Stuck or drifting ECT sensor | Coolant temperature, timing advance |
+| Throttle position sensor fault | Fault | TPS drift | Throttle position vs. accelerator pedal position mismatch |
 
-The injection engine must produce, for each non-healthy class, a modification that is both detectable in the listed signature PIDs and physically consistent with secondary effects (for example, a biased O₂ sensor causing the ECU to commanded-compensate via fuel trims).
+The injection engine produces, for each fault class, a modification that is both detectable in the listed signature PIDs and physically consistent with secondary effects. The cold_start regime is **not** injected — it occurs naturally in any session that begins with a cold engine, and the classifier learns it from labelled windows in the regular dataset.
+
+**Oxygen sensor fault — dropped from the taxonomy (v1.2).** Earlier drafts of this charter (v1.0–v1.1) included an oxygen sensor fault as the fifth class. Investigation during Week 1 showed that `FUEL_AIR_COMMANDED_EQUIV_RATIO` is always-zero on the Etios ECU (see `docs/DATA_NOTES.md`), making the primary O₂-sensor signature unobservable in the carOBD recordings. Synthetic O₂ injection cannot be verified against a real signal in this dataset, so the class was dropped and the deployment slot reassigned to `cold_start`. The reframe is part of the v1.2 amendment that this charter version ships.
 
 ---
 
@@ -160,14 +162,16 @@ The baseline-normalization step is what makes cross-vehicle generalization possi
 
 ### 7.5 Evaluation protocol
 
-Cross-validation is reported two ways:
+Evaluation is reported on three distinct data paths. The thesis must report all three.
 
-- **(a) Fixed session-level holdout** — `{drive1, live12}` held out; the remaining 7 sessions train the model. Used by `scripts/rebuild_all.py` to produce the deployed artefacts and the headline F1 number.
-- **(b) Leave-one-session-out (LOSO)** — all 9 usable sessions iterated; each held out in turn. Executed by `scripts/loso_cv.py`. Reports mean ± std macro-F1 as the honest generalisation estimate with error bars. The thesis must report both (a) and (b).
+- **(a) Fixed session-level holdout (synthetic)** — `{drive1, live12}` held out; the remaining 7 sessions train the model. Used by `scripts/rebuild_all.py` to produce the deployed artefacts and the headline synthetic macro-F1 number. Per §11 invariant #7, this number is a self-consistency floor, not a real-fault detection result.
+- **(b) Leave-one-session-out cross-validation (synthetic)** — all 9 usable carOBD sessions iterated; each held out in turn. Executed by `scripts/loso_cv.py`. Reports mean ± std macro-F1 as the honest generalisation estimate with error bars across sessions.
+- **(c) Real-fault evaluation (Skoda)** — windows from induced-fault recordings collected per `docs/REAL_FAULT_COLLECTION.md` are scored by the harness in `src/eval/real_fault_eval.py`. The headline metric is **vacuum-leak recall ≥ 0.60**, where recall counts windows whose elapsed time falls inside the recording's `mods_in_place_from_s ↔ mods_removed_at_s` interval that are flagged by the classifier as `air_system` or `fuel_system`, **or** scored ≥ 0.85 by the IsolationForest detector. Below-target recall triggers the reframe specified in §11 invariant #7.
 
 Additional evaluation items:
 - Per-class precision, recall, and F1, plus macro-F1 and a confusion matrix.
-- For the forecaster: MAE, RMSE, and a calibration plot of predicted vs. actual severity on held-out ramped injections.
+- Legacy severity forecaster (`models/forecaster_v1.pkl`): MAE, RMSE, and a calibration plot of predicted vs. actual severity on held-out ramped injections. Reported as a sanity floor (per §11 invariant #7).
+- PID forecaster (`models/pid_forecaster_v1.pkl`): per-PID MAE in z-units against a per-PID "current value persists" baseline. Beating persistence is the success criterion; LTFT not beating persistence is a documented limitation (see `models/MODEL_VERSIONS.md`).
 
 ### 7.6 Live demonstration
 
@@ -236,6 +240,11 @@ If (3) fails: fall back to a recorded Skoda session for the demo instead of live
 | R8 | One team member blocked on environment setup | Medium | Low | `requirements.txt` locked in Week 1; both members verify a clean install on their own machine |
 | R9 | Misfire-related question during defense | High | Low | Prepared answer: "1 Hz OBD-II cannot resolve per-cylinder combustion; misfire detection is explicitly out of scope and would require high-rate CAN access" |
 | R10 | Claims in paper exceed experimental evidence | Medium | High | Every claim reviewed against Section 11 honest-framing rules before submission |
+| R11 | Skoda fault induction goes wrong — limp-mode entry, persistent unexpected DTC, stranded vehicle | Low | High | Use only Faults 1 (vacuum leak) and 2 (ECT bias) from `docs/REAL_FAULT_COLLECTION.md`. ECT bias is gated on three preconditions (wiring diagram in hand, code-clear scanner on-site, prior bench test on a junkyard sensor). Limp-mode recovery procedure documented in §6.5 of the collection protocol. Abort on any DTC not in the expected list. |
+| R12 | One-class anomaly detector (IsolationForest) overfits to training-session healthy distributions; healthy-floor score on held-out sessions is too high | Medium | Medium | Cross-session drift is already documented in `results/anomaly_v1_results.json` (test healthy mean ≈ 0.68 against trained healthy ≈ 0.0). Production deployment uses per-vehicle baseline-fit via the existing `scripts/live_baseline_capture.py` path, mirroring how the classifier's normalizer is re-fit per vehicle. |
+| R13 | PID forecaster fails to generalise across sessions for ECU-state signals — LTFT is dramatically session-overfit | Medium | Medium | Documented honest finding in `models/MODEL_VERSIONS.md` and `results/pid_forecaster_v1_results.json`. Coolant beats persistence; MAP and TPS ratio are noise-tied; LTFT is reported as a limitation in the paper. Fallback: if real-fault recall (path c) depends on LTFT residual specifically, re-task to per-vehicle-baseline residual prediction. |
+| R14 | Team cannot record any real Skoda fault before deadline (no donor parts, no parking lot, weather, etc.) | Medium | High | Real-fault path (c) is evaluated against the hand-crafted plumbing fixture only, with the limitation flagged in the paper abstract per the v1.2 reframing rule (§11 invariant #7). The collection protocol stays in the repo as an artefact for post-defence iteration. |
+| R15 | Existing tests break from forecaster re-task or directory restructuring (Step 4 follow-up) | High | Low | The Step-4 commit is purely additive — the legacy forecaster file is untouched and still loads `forecaster_v1.pkl`. The deferred relocation (legacy → `src/legacy/`) gates on a coordinated dashboard-panel-swap PR, and that PR renames the legacy test file `tests/test_forecaster.py` → `tests/test_legacy_severity_forecaster.py` in the same diff so all tests stay discoverable. |
 
 ---
 
@@ -249,6 +258,9 @@ These rules govern how the work is described in the paper, book, presentation, a
 4. **Misfire detection is not claimed** anywhere, for the reason given in Section 4.2.
 5. Fault severity values are defined **per-class in physically meaningful units** and reported as such in the paper, not as unitless numbers whose meaning is hidden in the code.
 6. The fault injection engine is a **reasonable approximation** of real fault mechanisms, not a certified simulator. The paper's discussion section acknowledges the gap between injected and real faults as the principal threat to external validity.
+7. Reported macro-F1 numbers on the synthetic dataset measure recovery of the injector's own ramp via the algebraic inverse in `src/features/severity.py` lines 32–35 (`_AIR_SYSTEM_SCALE = 14.56 = (0.8 + 0.32) × 13` exactly mirrors the injector's STFT and LTFT coefficients applied at magnitude 13 kPa). They are a **synthetic self-consistency floor**, not real-fault detection. The paper's results section reports these numbers under that explicit label and presents real-fault metrics (collected per `docs/REAL_FAULT_COLLECTION.md`) as the centrepiece. Headline real-fault metric: **vacuum-leak recall ≥ 0.60**. If real-fault data does not land before the deadline, the abstract names the limitation in one sentence and the paper's contribution is reframed as "detection algorithm + collection protocol; recall validation is future work."
+8. The one-class IsolationForest detector (`models/isolation_forest_v1.pkl`) is trained only on healthy windows and asks "does this look out-of-distribution from training healthy data?" — it is **complementary** to the classifier ("which of the known faults is this?"), not a replacement. Both are reported. Cross-session generalisation is a documented limitation (test healthy floor ≈ 0.68; see `results/anomaly_v1_results.json`); production deployment to a new vehicle requires per-vehicle re-fit of the detector on the Skoda baseline, mirroring the classifier's normalizer re-fit path.
+9. The PID forecaster (`models/pid_forecaster_v1.pkl`) predicts raw next-window PID values rather than the injector's severity scalar. It is trained on healthy windows only — no fault labels, no severity formula, no injector inverse. The legacy severity forecaster (`models/forecaster_v1.pkl`) is preserved in the repo and reported as a self-consistency floor; the PID forecaster is the centrepiece going forward. Healthy-only PID forecasting works for slow thermal signals (coolant beats persistence) but fails for ECU-state signals encoding session-specific operating context (LTFT does not). That failure is documented in `models/MODEL_VERSIONS.md` and reported as a limitation in the paper.
 
 ---
 
@@ -295,6 +307,8 @@ This charter is the single source of truth for project scope. Changes happen exp
 |---|---|---|
 | 1.0 | 24 April 2026 | Initial charter. Level 2.5 priority locked. EngineFaultDB dropped from scope. Forecaster formulated as 60s-ahead severity regression with ordinal fallback. Window = 60s, stride = 10s. Classifier target = macro-F1 ≥ 0.80. Forecaster target = MAE ≤ 15% of severity range. |
 | 1.1 | 24 April 2026 | Added Section 16 (Budget). ELM327 price left as a placeholder variable pending adapter selection. |
+| 1.1.1 | 29 May 2026 | Interim framing correction ahead of v1.2 charter amendment. Reported macro-F1 numbers (≈ 0.87 fixed-holdout, ≈ 0.96 LOSO mean) are reclassified as **synthetic self-consistency floors** — they measure recovery of the injector's own coefficients via the algebraic inverse in `src/features/severity.py` lines 32–35, not real-fault detection. §6 carries a stop-gap note about the deployed `cold_start ↔ oxygen_sensor` swap. §11 adds invariant #7. The new headline real-fault metric (vacuum-leak recall ≥ 0.60) lands when the data does. Real-fault evaluation harness, Skoda data-collection protocol, anomaly-detection track, and PID-residual forecaster re-task are scheduled as a 7-step `honest-framing` PR series culminating in charter v1.2. |
+| 1.2 | 29 May 2026 | **Honest-framing reconciliation.** §6 taxonomy formally amends `oxygen_sensor → cold_start` and tags each row as fault or regime. §7.5 evaluation protocol grows a third path: real-fault evaluation against Skoda recordings per `docs/REAL_FAULT_COLLECTION.md`, with vacuum-leak recall ≥ 0.60 as the headline real-fault metric. §10 risk table extended with R11 (limp-mode on ECT bias), R12 (anomaly detector session-overfit), R13 (PID forecaster session-overfit, esp. LTFT), R14 (no real-fault data before deadline), R15 (forecaster re-task test breakage). §11 invariant #7 cleaned up and elevated to permanent; §11 gains invariants #8 (one-class detector framing) and #9 (PID-forecaster vs legacy severity forecaster framing). Delivered alongside: `docs/REAL_FAULT_COLLECTION.md` (collection protocol), `src/eval/real_fault_eval.py` (harness), `src/models/anomaly.py` + `models/isolation_forest_v1.pkl` (one-class detector), `src/models/pid_forecaster.py` + `models/pid_forecaster_v1.pkl` (re-tasked forecaster), `models/MODEL_VERSIONS.md` (artefact semantics tracking). The legacy severity forecaster code and `models/forecaster_v1.pkl` are preserved verbatim; the relocation to `src/legacy/` and the dashboard-panel swap to PID residuals are scheduled as a follow-up PR (still v1.2 scope, separate diff for blast-radius control). |
 
 ---
 

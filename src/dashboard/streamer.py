@@ -29,13 +29,32 @@ from src.config import USEFUL_PIDS
 from src.data_loading import load_carobd_csv
 
 
+def _load_csv(path: Path) -> pd.DataFrame:
+    """Load a CSV file in either raw carOBD format or pre-processed demo format.
+
+    Raw carOBD files have column names like "ENGINE_RPM ()" — load_carobd_csv()
+    renames them to clean PID names.  Demo/synthetic files are saved with clean
+    PID names already (e.g. "ENGINE_RPM") — pd.read_csv() suffices for those.
+    """
+    try:
+        return load_carobd_csv(path)
+    except ValueError:
+        # Columns are already in clean-name format (demo / injected CSV).
+        df = pd.read_csv(path)
+        df.attrs["session_id"] = path.stem
+        df.attrs["source_file"] = path.name
+        return df
+
+
 class CsvStreamer:
-    """Streams one OBD-II row per tick from a carOBD CSV file.
+    """Streams one OBD-II row per tick from a carOBD or demo CSV file.
 
     Parameters
     ----------
     path : Path or str
-        Path to a carOBD CSV (one of the 9 usable files or a live capture).
+        Path to a carOBD CSV (one of the 9 usable files or a live capture)
+        OR a pre-processed demo CSV with fault-injected data (clean column
+        names — see ``data/demo/``).
     speed : float
         Playback multiplier.  ``speed=10.0`` means the dashboard advances
         10 simulated seconds per real second.  Stored as an attribute so the
@@ -45,7 +64,7 @@ class CsvStreamer:
 
     def __init__(self, path: Path | str, speed: float = 1.0) -> None:
         path = Path(path)
-        df = load_carobd_csv(path)
+        df = _load_csv(path)
 
         # Keep only the 14 working PIDs so downstream code never sees stale
         # or unusable columns.  Clip missing PIDs gracefully in case a Skoda

@@ -51,6 +51,7 @@ from src.config import MODELS_DIR, WINDOW_LENGTH_S, WINDOW_STRIDE_S
 from src.diagnostics.cold_start_checker import ColdStartAlert, ColdStartChecker
 from src.features.extractor import extract_features, feature_names
 from src.features.severity import compute_severity
+from src.models.anomaly import AnomalyDetector
 from src.models.classifier import ALL_LABELS
 from src.models.explainer import SHAPExplainer
 from src.models.forecaster import FAULT_TYPES, FaultForecaster
@@ -100,6 +101,11 @@ class DashboardState:
     # the last-known state is held until a good row arrives.
     data_quality_ok: bool = True
     data_quality_violations: list = field(default_factory=list)
+
+    # One-class anomaly score in [0, 1] from the IsolationForest detector.
+    # 0.0 when the detector is not loaded (model file missing) or the
+    # buffer is still warming up — same convention as severities.
+    anomaly_score: float = 0.0
 
 
 def _initial_state() -> DashboardState:
@@ -176,6 +182,21 @@ class InferenceEngine:
 
         log.info("InferenceEngine: loading FaultForecaster…")
         self._forecaster = FaultForecaster.load(models_dir)
+
+        # Optional one-class anomaly detector.  Loaded gracefully — if the
+        # artefact is missing (fresh clone, model not yet trained), the
+        # dashboard still runs and the anomaly panel shows "not loaded".
+        anomaly_path = models_dir / "isolation_forest_v1.pkl"
+        if anomaly_path.exists():
+            log.info("InferenceEngine: loading AnomalyDetector…")
+            try:
+                self._anomaly: AnomalyDetector | None = AnomalyDetector.load(anomaly_path)
+            except Exception as exc:  # pragma: no cover — corrupt artefact
+                log.warning("AnomalyDetector load failed (%s); panel disabled", exc)
+                self._anomaly = None
+        else:
+            log.info("InferenceEngine: AnomalyDetector artefact not found — panel disabled")
+            self._anomaly = None
         # Share the same normalizer between classifier and forecaster.
         # Critical for cross-vehicle inference (Skoda normalizer_override): without
         # this, the forecaster still z-scores against the Etios healthy baseline
@@ -291,6 +312,7 @@ class InferenceEngine:
                 top_features=prev.top_features,
                 data_quality_ok=False,
                 data_quality_violations=verdict.violations,
+                anomaly_score=prev.anomaly_score,
             )
             return
 
@@ -341,6 +363,7 @@ class InferenceEngine:
                 top_features=prev.top_features,
                 data_quality_ok=True,
                 data_quality_violations=[],
+                anomaly_score=prev.anomaly_score,
             )
 
     def reset(self) -> None:
@@ -479,6 +502,16 @@ class InferenceEngine:
                 log.warning("predict_all failed (%s) — zeroing forecasts", exc)
                 forecasts = {fault: 0.0 for fault in FAULT_TYPES}
 
+        # One-class anomaly score (independent of the classifier label).
+        # 0.0 when the detector is not loaded — the dashboard panel reads
+        # this as "model not available" rather than "definitely healthy."
+        anomaly_score = 0.0
+        if self._anomaly is not None:
+            try:
+                anomaly_score = float(self._anomaly.score(feats, self._norm))
+            except Exception as exc:
+                log.warning("anomaly score failed (%s) — leaving at 0.0", exc)
+
         return DashboardState(
             elapsed_s=self._elapsed_s,
             latest_row=latest_row,
@@ -493,4 +526,5 @@ class InferenceEngine:
             top_features=top_features,
             data_quality_ok=True,
             data_quality_violations=[],
+            anomaly_score=anomaly_score,
         )

@@ -1,0 +1,12 @@
+This directory is the landing pad for real Skoda Roomster fault recordings
+collected per docs/REAL_FAULT_COLLECTION.md. Empty in this commit; the
+.gitkeep marker is here so the directory survives a fresh clone.
+
+When a recording lands, it follows the naming convention documented in
+data/real_faults/README.md:
+
+  skoda_<faulttype>_<YYYYMMDD>_<runN>.csv
+  skoda_<faulttype>_<YYYYMMDD>_<runN>.json   (sibling metadata)
+
+CSVs in this directory are gitignored — they get checked in only after
+review (file size, PII check on metadata).
