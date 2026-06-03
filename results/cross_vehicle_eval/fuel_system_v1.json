@@ -1,0 +1,31 @@
+{
+  "fault_type": "fuel_system",
+  "vehicles": {
+    "etios": {
+      "csv_path": "data\\real_faults\\mock\\mock_lean_fault.csv",
+      "status": "evaluated",
+      "n_windows": 55,
+      "label_counts": {
+        "healthy": 21,
+        "air_system": 3,
+        "fuel_system": 31
+      },
+      "fault_window_count": 34,
+      "fault_fraction": 0.6181818181818182
+    },
+    "skoda": {
+      "csv_path": "data\\real_faults\\mock\\mock_lean_fault.csv",
+      "status": "evaluated",
+      "n_windows": 55,
+      "label_counts": {
+        "healthy": 21,
+        "air_system": 3,
+        "fuel_system": 31
+      },
+      "fault_window_count": 34,
+      "fault_fraction": 0.6181818181818182
+    }
+  },
+  "paired_skoda_minus_etios_fault_fraction": 0.0,
+  "note": "Per-vehicle fault_fraction is a coarse aggregate. The real detection-rate computation slices each recording into pre / fault / post intervals using the sibling metadata JSON (mods_in_place_from_s, mods_removed_at_s) and counts only windows inside the fault interval. See docs/REAL_FAULT_COLLECTION.md \u00a710 for the headline metric definition."
+}

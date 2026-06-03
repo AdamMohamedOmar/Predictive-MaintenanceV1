@@ -1,0 +1,731 @@
+{
+  "csv_path": "data\\real_faults\\mock\\mock_lean_fault.csv",
+  "n_rows": 600,
+  "n_windows": 55,
+  "windows": [
+    {
+      "elapsed_s": 60,
+      "label": "healthy",
+      "confidence": 0.9984816908836365,
+      "all_probs": {
+        "healthy": 0.9984816908836365,
+        "air_system": 0.0006239557988010347,
+        "fuel_system": 0.00023267767392098904,
+        "coolant_temp_sensor": 0.00023454753682017326,
+        "throttle_position_sensor": 0.00022844967315904796,
+        "cold_start": 0.00019867443188559264
+      }
+    },
+    {
+      "elapsed_s": 70,
+      "label": "healthy",
+      "confidence": 0.9984527826309204,
+      "all_probs": {
+        "healthy": 0.9984527826309204,
+        "air_system": 0.0006343492423184216,
+        "fuel_system": 0.00023748022795189172,
+        "coolant_temp_sensor": 0.00023938891536090523,
+        "throttle_position_sensor": 0.00023316517763305455,
+        "cold_start": 0.00020277533621992916
+      }
+    },
+    {
+      "elapsed_s": 80,
+      "label": "healthy",
+      "confidence": 0.9928291440010071,
+      "all_probs": {
+        "healthy": 0.9928291440010071,
+        "air_system": 0.0013993717730045319,
+        "fuel_system": 0.0005051485495641828,
+        "coolant_temp_sensor": 0.0005901250406168401,
+        "throttle_position_sensor": 0.0004959694924764335,
+        "cold_start": 0.0041802795603871346
+      }
+    },
+    {
+      "elapsed_s": 90,
+      "label": "healthy",
+      "confidence": 0.9937387704849243,
+      "all_probs": {
+        "healthy": 0.9937387704849243,
+        "air_system": 0.001025858917273581,
+        "fuel_system": 0.000377524527721107,
+        "coolant_temp_sensor": 0.0006534887361340225,
+        "throttle_position_sensor": 0.00037066449294798076,
+        "cold_start": 0.0038336673751473427
+      }
+    },
+    {
+      "elapsed_s": 100,
+      "label": "healthy",
+      "confidence": 0.9963141083717346,
+      "all_probs": {
+        "healthy": 0.9963141083717346,
+        "air_system": 0.00043353543151170015,
+        "fuel_system": 0.00024174174177460372,
+        "coolant_temp_sensor": 0.0004184513818472624,
+        "throttle_position_sensor": 0.00023909038281999528,
+        "cold_start": 0.0023531215265393257
+      }
+    },
+    {
+      "elapsed_s": 110,
+      "label": "healthy",
+      "confidence": 0.9961923360824585,
+      "all_probs": {
+        "healthy": 0.9961923360824585,
+        "air_system": 0.00047033213195391,
+        "fuel_system": 0.00028576096519827843,
+        "coolant_temp_sensor": 0.00033383173285983503,
+        "throttle_position_sensor": 0.0002826265699695796,
+        "cold_start": 0.002435108879581094
+      }
+    },
+    {
+      "elapsed_s": 120,
+      "label": "healthy",
+      "confidence": 0.9986385703086853,
+      "all_probs": {
+        "healthy": 0.9986385703086853,
+        "air_system": 0.00012183154467493296,
+        "fuel_system": 0.00011433842882979661,
+        "coolant_temp_sensor": 0.00011525739682838321,
+        "throttle_position_sensor": 0.00011308439570711926,
+        "cold_start": 0.0008969670161604881
+      }
+    },
+    {
+      "elapsed_s": 130,
+      "label": "healthy",
+      "confidence": 0.9992519021034241,
+      "all_probs": {
+        "healthy": 0.9992519021034241,
+        "air_system": 0.000142433971632272,
+        "fuel_system": 0.00010665605077520013,
+        "coolant_temp_sensor": 0.00010751327499747276,
+        "throttle_position_sensor": 9.368696191813797e-05,
+        "cold_start": 0.0002978248812723905
+      }
+    },
+    {
+      "elapsed_s": 140,
+      "label": "healthy",
+      "confidence": 0.9995108842849731,
+      "all_probs": {
+        "healthy": 0.9995108842849731,
+        "air_system": 0.0001301992597291246,
+        "fuel_system": 9.531842079013586e-05,
+        "coolant_temp_sensor": 9.608443360775709e-05,
+        "throttle_position_sensor": 8.372788579436019e-05,
+        "cold_start": 8.380952931474894e-05
+      }
+    },
+    {
+      "elapsed_s": 150,
+      "label": "healthy",
+      "confidence": 0.9994521737098694,
+      "all_probs": {
+        "healthy": 0.9994521737098694,
+        "air_system": 0.00012492983660195023,
+        "fuel_system": 0.00011406853445805609,
+        "coolant_temp_sensor": 0.00011498533422127366,
+        "throttle_position_sensor": 9.643487283028662e-05,
+        "cold_start": 9.739869710756466e-05
+      }
+    },
+    {
+      "elapsed_s": 160,
+      "label": "healthy",
+      "confidence": 0.9994966983795166,
+      "all_probs": {
+        "healthy": 0.9994966983795166,
+        "air_system": 0.00011745743540814146,
+        "fuel_system": 0.00010281180584570393,
+        "coolant_temp_sensor": 0.00010363803448854014,
+        "throttle_position_sensor": 9.16115241125226e-05,
+        "cold_start": 8.778701158007607e-05
+      }
+    },
+    {
+      "elapsed_s": 170,
+      "label": "healthy",
+      "confidence": 0.9994872808456421,
+      "all_probs": {
+        "healthy": 0.9994872808456421,
+        "air_system": 0.00012131522817071527,
+        "fuel_system": 0.00010156083590118214,
+        "coolant_temp_sensor": 0.00011261235340498388,
+        "throttle_position_sensor": 9.049683285411447e-05,
+        "cold_start": 8.671885007061064e-05
+      }
+    },
+    {
+      "elapsed_s": 180,
+      "label": "healthy",
+      "confidence": 0.9990133047103882,
+      "all_probs": {
+        "healthy": 0.9990133047103882,
+        "air_system": 0.00018348399316892028,
+        "fuel_system": 0.00021197166643105447,
+        "coolant_temp_sensor": 0.00023503773263655603,
+        "throttle_position_sensor": 0.0001751977251842618,
+        "cold_start": 0.00018099439330399036
+      }
+    },
+    {
+      "elapsed_s": 190,
+      "label": "healthy",
+      "confidence": 0.9990319013595581,
+      "all_probs": {
+        "healthy": 0.9990319013595581,
+        "air_system": 0.00011648273357423022,
+        "fuel_system": 0.00022098342014942318,
+        "coolant_temp_sensor": 0.00024502986343577504,
+        "throttle_position_sensor": 0.00019690956105478108,
+        "cold_start": 0.00018868898041546345
+      }
+    },
+    {
+      "elapsed_s": 200,
+      "label": "healthy",
+      "confidence": 0.9991286396980286,
+      "all_probs": {
+        "healthy": 0.9991286396980286,
+        "air_system": 0.00011522589920787141,
+        "fuel_system": 0.00018427750910632312,
+        "coolant_temp_sensor": 0.00020433016470633447,
+        "throttle_position_sensor": 0.00021016050595790148,
+        "cold_start": 0.0001573475601617247
+      }
+    },
+    {
+      "elapsed_s": 210,
+      "label": "healthy",
+      "confidence": 0.9992539286613464,
+      "all_probs": {
+        "healthy": 0.9992539286613464,
+        "air_system": 0.00016891163249965757,
+        "fuel_system": 0.00014627412019763142,
+        "coolant_temp_sensor": 0.0001474496239097789,
+        "throttle_position_sensor": 0.000154854278662242,
+        "cold_start": 0.00012861275172326714
+      }
+    },
+    {
+      "elapsed_s": 220,
+      "label": "healthy",
+      "confidence": 0.9993754029273987,
+      "all_probs": {
+        "healthy": 0.9993754029273987,
+        "air_system": 0.00016130121366586536,
+        "fuel_system": 0.00012260983930900693,
+        "coolant_temp_sensor": 0.00012359529500827193,
+        "throttle_position_sensor": 0.00010925287642749026,
+        "cold_start": 0.00010780583397718146
+      }
+    },
+    {
+      "elapsed_s": 230,
+      "label": "healthy",
+      "confidence": 0.9993605017662048,
+      "all_probs": {
+        "healthy": 0.9993605017662048,
+        "air_system": 0.00015262162196449935,
+        "fuel_system": 0.0001219674086314626,
+        "coolant_temp_sensor": 0.0001229475747095421,
+        "throttle_position_sensor": 0.00013471918646246195,
+        "cold_start": 0.00010724087042035535
+      }
+    },
+    {
+      "elapsed_s": 240,
+      "label": "healthy",
+      "confidence": 0.9994834661483765,
+      "all_probs": {
+        "healthy": 0.9994834661483765,
+        "air_system": 0.00013279332779347897,
+        "fuel_system": 0.00010354142432333902,
+        "coolant_temp_sensor": 0.00010437361925141886,
+        "throttle_position_sensor": 8.478768722852692e-05,
+        "cold_start": 9.103967022383586e-05
+      }
+    },
+    {
+      "elapsed_s": 250,
+      "label": "healthy",
+      "confidence": 0.9990659356117249,
+      "all_probs": {
+        "healthy": 0.9990659356117249,
+        "air_system": 0.0004453390429262072,
+        "fuel_system": 0.0001306793128605932,
+        "coolant_temp_sensor": 0.0001317296118941158,
+        "throttle_position_sensor": 0.0001114503393182531,
+        "cold_start": 0.00011490099859656766
+      }
+    },
+    {
+      "elapsed_s": 260,
+      "label": "healthy",
+      "confidence": 0.9993482232093811,
+      "all_probs": {
+        "healthy": 0.9993482232093811,
+        "air_system": 0.00020008007413707674,
+        "fuel_system": 0.00012187254469608888,
+        "coolant_temp_sensor": 0.00012285207048989832,
+        "throttle_position_sensor": 9.979861351894215e-05,
+        "cold_start": 0.00010715746611822397
+      }
+    },
+    {
+      "elapsed_s": 270,
+      "label": "air_system",
+      "confidence": 0.9078589081764221,
+      "all_probs": {
+        "healthy": 0.0820014700293541,
+        "air_system": 0.9078589081764221,
+        "fuel_system": 0.0067943399772048,
+        "coolant_temp_sensor": 0.0012788736494258046,
+        "throttle_position_sensor": 0.000976606272161007,
+        "cold_start": 0.001089788624085486
+      }
+    },
+    {
+      "elapsed_s": 280,
+      "label": "air_system",
+      "confidence": 0.5663895606994629,
+      "all_probs": {
+        "healthy": 0.01143958605825901,
+        "air_system": 0.5663895606994629,
+        "fuel_system": 0.4145452678203583,
+        "coolant_temp_sensor": 0.0034539063926786184,
+        "throttle_position_sensor": 0.0019129224820062518,
+        "cold_start": 0.0022587268613278866
+      }
+    },
+    {
+      "elapsed_s": 290,
+      "label": "air_system",
+      "confidence": 0.6651667356491089,
+      "all_probs": {
+        "healthy": 0.005891024600714445,
+        "air_system": 0.6651667356491089,
+        "fuel_system": 0.3232874572277069,
+        "coolant_temp_sensor": 0.0024446346797049046,
+        "throttle_position_sensor": 0.001448692288249731,
+        "cold_start": 0.0017614919925108552
+      }
+    },
+    {
+      "elapsed_s": 300,
+      "label": "fuel_system",
+      "confidence": 0.7841187715530396,
+      "all_probs": {
+        "healthy": 0.002390601672232151,
+        "air_system": 0.20983004570007324,
+        "fuel_system": 0.7841187715530396,
+        "coolant_temp_sensor": 0.001582497963681817,
+        "throttle_position_sensor": 0.0009377895039506257,
+        "cold_start": 0.0011402757372707129
+      }
+    },
+    {
+      "elapsed_s": 310,
+      "label": "fuel_system",
+      "confidence": 0.9450774788856506,
+      "all_probs": {
+        "healthy": 0.0024991075042635202,
+        "air_system": 0.04774577543139458,
+        "fuel_system": 0.9450774788856506,
+        "coolant_temp_sensor": 0.0018062784802168608,
+        "throttle_position_sensor": 0.0013321583392098546,
+        "cold_start": 0.0015392150962725282
+      }
+    },
+    {
+      "elapsed_s": 320,
+      "label": "fuel_system",
+      "confidence": 0.9779996275901794,
+      "all_probs": {
+        "healthy": 0.006026044487953186,
+        "air_system": 0.010739932768046856,
+        "fuel_system": 0.9779996275901794,
+        "coolant_temp_sensor": 0.0015606576343998313,
+        "throttle_position_sensor": 0.0023438625503331423,
+        "cold_start": 0.001329910010099411
+      }
+    },
+    {
+      "elapsed_s": 330,
+      "label": "fuel_system",
+      "confidence": 0.9913784265518188,
+      "all_probs": {
+        "healthy": 0.002444201847538352,
+        "air_system": 0.004862344823777676,
+        "fuel_system": 0.9913784265518188,
+        "coolant_temp_sensor": 0.0003663861134555191,
+        "throttle_position_sensor": 0.000605266890488565,
+        "cold_start": 0.00034342901199124753
+      }
+    },
+    {
+      "elapsed_s": 340,
+      "label": "fuel_system",
+      "confidence": 0.9949706196784973,
+      "all_probs": {
+        "healthy": 0.0008874319028109312,
+        "air_system": 0.002868072595447302,
+        "fuel_system": 0.9949706196784973,
+        "coolant_temp_sensor": 0.000367713684681803,
+        "throttle_position_sensor": 0.0005614709225483239,
+        "cold_start": 0.00034467337536625564
+      }
+    },
+    {
+      "elapsed_s": 350,
+      "label": "fuel_system",
+      "confidence": 0.9952622652053833,
+      "all_probs": {
+        "healthy": 0.0008030168246477842,
+        "air_system": 0.00291485246270895,
+        "fuel_system": 0.9952622652053833,
+        "coolant_temp_sensor": 0.00036782148526981473,
+        "throttle_position_sensor": 0.0003072767867706716,
+        "cold_start": 0.0003447744238656014
+      }
+    },
+    {
+      "elapsed_s": 360,
+      "label": "fuel_system",
+      "confidence": 0.9937360286712646,
+      "all_probs": {
+        "healthy": 0.0005249703535810113,
+        "air_system": 0.004669490270316601,
+        "fuel_system": 0.9937360286712646,
+        "coolant_temp_sensor": 0.0003672574239317328,
+        "throttle_position_sensor": 0.00035802667844109237,
+        "cold_start": 0.0003442457236815244
+      }
+    },
+    {
+      "elapsed_s": 370,
+      "label": "fuel_system",
+      "confidence": 0.9901406168937683,
+      "all_probs": {
+        "healthy": 0.0004061227373313159,
+        "air_system": 0.008441728539764881,
+        "fuel_system": 0.9901406168937683,
+        "coolant_temp_sensor": 0.00036592865944840014,
+        "throttle_position_sensor": 0.000302557076793164,
+        "cold_start": 0.000343000196153298
+      }
+    },
+    {
+      "elapsed_s": 380,
+      "label": "fuel_system",
+      "confidence": 0.9707666039466858,
+      "all_probs": {
+        "healthy": 0.00048564348253421485,
+        "air_system": 0.02731744758784771,
+        "fuel_system": 0.9707666039466858,
+        "coolant_temp_sensor": 0.0005174368270672858,
+        "throttle_position_sensor": 0.0004278270644135773,
+        "cold_start": 0.000485015130834654
+      }
+    },
+    {
+      "elapsed_s": 390,
+      "label": "fuel_system",
+      "confidence": 0.9983221888542175,
+      "all_probs": {
+        "healthy": 6.833457155153155e-05,
+        "air_system": 0.0012327315052971244,
+        "fuel_system": 0.9983221888542175,
+        "coolant_temp_sensor": 0.00013629473687615246,
+        "throttle_position_sensor": 0.00011269130482105538,
+        "cold_start": 0.0001277548144571483
+      }
+    },
+    {
+      "elapsed_s": 400,
+      "label": "fuel_system",
+      "confidence": 0.9978995323181152,
+      "all_probs": {
+        "healthy": 7.037415343802422e-05,
+        "air_system": 0.0015731167513877153,
+        "fuel_system": 0.9978995323181152,
+        "coolant_temp_sensor": 0.0001775617420207709,
+        "throttle_position_sensor": 0.00012814381625503302,
+        "cold_start": 0.0001513087481725961
+      }
+    },
+    {
+      "elapsed_s": 410,
+      "label": "fuel_system",
+      "confidence": 0.9984468817710876,
+      "all_probs": {
+        "healthy": 7.025613740552217e-05,
+        "air_system": 0.001124434289522469,
+        "fuel_system": 0.9984468817710876,
+        "coolant_temp_sensor": 0.00014038843801245093,
+        "throttle_position_sensor": 9.838779078563675e-05,
+        "cold_start": 0.0001196316079585813
+      }
+    },
+    {
+      "elapsed_s": 420,
+      "label": "fuel_system",
+      "confidence": 0.9984689354896545,
+      "all_probs": {
+        "healthy": 6.065811248845421e-05,
+        "air_system": 0.0010849327081814408,
+        "fuel_system": 0.9984689354896545,
+        "coolant_temp_sensor": 0.0001509681751485914,
+        "throttle_position_sensor": 0.00010580233356449753,
+        "cold_start": 0.00012864709424320608
+      }
+    },
+    {
+      "elapsed_s": 430,
+      "label": "fuel_system",
+      "confidence": 0.9991931319236755,
+      "all_probs": {
+        "healthy": 8.772235742071643e-05,
+        "air_system": 0.0003334285574965179,
+        "fuel_system": 0.9991931319236755,
+        "coolant_temp_sensor": 0.00015107766375876963,
+        "throttle_position_sensor": 0.00010587907308945432,
+        "cold_start": 0.00012874040112365037
+      }
+    },
+    {
+      "elapsed_s": 440,
+      "label": "fuel_system",
+      "confidence": 0.9991317391395569,
+      "all_probs": {
+        "healthy": 0.00013855333963874727,
+        "air_system": 0.00030096672708168626,
+        "fuel_system": 0.9991317391395569,
+        "coolant_temp_sensor": 0.0001655677770031616,
+        "throttle_position_sensor": 0.00012210893328301609,
+        "cold_start": 0.00014108810864854604
+      }
+    },
+    {
+      "elapsed_s": 450,
+      "label": "fuel_system",
+      "confidence": 0.9917213320732117,
+      "all_probs": {
+        "healthy": 0.0033145577181130648,
+        "air_system": 0.002927915658801794,
+        "fuel_system": 0.9917213320732117,
+        "coolant_temp_sensor": 0.0006070865201763809,
+        "throttle_position_sensor": 0.000911748968064785,
+        "cold_start": 0.0005173272802494466
+      }
+    },
+    {
+      "elapsed_s": 460,
+      "label": "fuel_system",
+      "confidence": 0.993822455406189,
+      "all_probs": {
+        "healthy": 0.0013213296188041568,
+        "air_system": 0.0027231487911194563,
+        "fuel_system": 0.993822455406189,
+        "coolant_temp_sensor": 0.0006083727348595858,
+        "throttle_position_sensor": 0.0010062629589810967,
+        "cold_start": 0.0005184233305044472
+      }
+    },
+    {
+      "elapsed_s": 470,
+      "label": "fuel_system",
+      "confidence": 0.9923875331878662,
+      "all_probs": {
+        "healthy": 0.0012756027281284332,
+        "air_system": 0.004346232395619154,
+        "fuel_system": 0.9923875331878662,
+        "coolant_temp_sensor": 0.0006240792572498322,
+        "throttle_position_sensor": 0.0008348042028956115,
+        "cold_start": 0.0005318073672242463
+      }
+    },
+    {
+      "elapsed_s": 480,
+      "label": "fuel_system",
+      "confidence": 0.9900768399238586,
+      "all_probs": {
+        "healthy": 0.00145907630212605,
+        "air_system": 0.006478039547801018,
+        "fuel_system": 0.9900768399238586,
+        "coolant_temp_sensor": 0.0006226261029951274,
+        "throttle_position_sensor": 0.0008328604162670672,
+        "cold_start": 0.0005305691156536341
+      }
+    },
+    {
+      "elapsed_s": 490,
+      "label": "fuel_system",
+      "confidence": 0.99366295337677,
+      "all_probs": {
+        "healthy": 0.0008056740625761449,
+        "air_system": 0.004055205732584,
+        "fuel_system": 0.99366295337677,
+        "coolant_temp_sensor": 0.0003672304155770689,
+        "throttle_position_sensor": 0.0007646983140148222,
+        "cold_start": 0.00034422040334902704
+      }
+    },
+    {
+      "elapsed_s": 500,
+      "label": "fuel_system",
+      "confidence": 0.9946558475494385,
+      "all_probs": {
+        "healthy": 0.0012438432313501835,
+        "air_system": 0.0028268720488995314,
+        "fuel_system": 0.9946558475494385,
+        "coolant_temp_sensor": 0.0003675973566714674,
+        "throttle_position_sensor": 0.0005612933309748769,
+        "cold_start": 0.0003445643524173647
+      }
+    },
+    {
+      "elapsed_s": 510,
+      "label": "fuel_system",
+      "confidence": 0.9936279058456421,
+      "all_probs": {
+        "healthy": 0.0007728114724159241,
+        "air_system": 0.004581161309033632,
+        "fuel_system": 0.9936279058456421,
+        "coolant_temp_sensor": 0.0003672174352686852,
+        "throttle_position_sensor": 0.00030677218455821276,
+        "cold_start": 0.0003442082379478961
+      }
+    },
+    {
+      "elapsed_s": 520,
+      "label": "fuel_system",
+      "confidence": 0.9933346509933472,
+      "all_probs": {
+        "healthy": 0.0005352511652745306,
+        "air_system": 0.0051121460273861885,
+        "fuel_system": 0.9933346509933472,
+        "coolant_temp_sensor": 0.0003671090817078948,
+        "throttle_position_sensor": 0.0003066816716454923,
+        "cold_start": 0.0003441066655796021
+      }
+    },
+    {
+      "elapsed_s": 530,
+      "label": "fuel_system",
+      "confidence": 0.9922326803207397,
+      "all_probs": {
+        "healthy": 0.00044271379010751843,
+        "air_system": 0.006307095289230347,
+        "fuel_system": 0.9922326803207397,
+        "coolant_temp_sensor": 0.00036670180270448327,
+        "throttle_position_sensor": 0.00030708586564287543,
+        "cold_start": 0.0003437249397393316
+      }
+    },
+    {
+      "elapsed_s": 540,
+      "label": "fuel_system",
+      "confidence": 0.9916427135467529,
+      "all_probs": {
+        "healthy": 0.0003245881525799632,
+        "air_system": 0.006972999777644873,
+        "fuel_system": 0.9916427135467529,
+        "coolant_temp_sensor": 0.0003783844877034426,
+        "throttle_position_sensor": 0.0003161011263728142,
+        "cold_start": 0.0003652252780739218
+      }
+    },
+    {
+      "elapsed_s": 550,
+      "label": "fuel_system",
+      "confidence": 0.9890480637550354,
+      "all_probs": {
+        "healthy": 0.00029425922548398376,
+        "air_system": 0.00961641687899828,
+        "fuel_system": 0.9890480637550354,
+        "coolant_temp_sensor": 0.0003773944335989654,
+        "throttle_position_sensor": 0.0002995897375512868,
+        "cold_start": 0.00036426965380087495
+      }
+    },
+    {
+      "elapsed_s": 560,
+      "label": "fuel_system",
+      "confidence": 0.9988632202148438,
+      "all_probs": {
+        "healthy": 0.00010578436922514811,
+        "air_system": 0.0007081010844558477,
+        "fuel_system": 0.9988632202148438,
+        "coolant_temp_sensor": 0.00011566941975615919,
+        "throttle_position_sensor": 9.56378789851442e-05,
+        "cold_start": 0.00011164673196617514
+      }
+    },
+    {
+      "elapsed_s": 570,
+      "label": "fuel_system",
+      "confidence": 0.9929730892181396,
+      "all_probs": {
+        "healthy": 0.00023861267254687846,
+        "air_system": 0.005831544753164053,
+        "fuel_system": 0.9929730892181396,
+        "coolant_temp_sensor": 0.00034267682349309325,
+        "throttle_position_sensor": 0.00028333201771602035,
+        "cold_start": 0.00033075938699766994
+      }
+    },
+    {
+      "elapsed_s": 580,
+      "label": "fuel_system",
+      "confidence": 0.9749924540519714,
+      "all_probs": {
+        "healthy": 0.0003416422405280173,
+        "air_system": 0.023232055827975273,
+        "fuel_system": 0.9749924540519714,
+        "coolant_temp_sensor": 0.0005196892889216542,
+        "throttle_position_sensor": 0.0004125486593693495,
+        "cold_start": 0.0005016158102080226
+      }
+    },
+    {
+      "elapsed_s": 590,
+      "label": "fuel_system",
+      "confidence": 0.9744952321052551,
+      "all_probs": {
+        "healthy": 0.00037049248930998147,
+        "air_system": 0.02385128289461136,
+        "fuel_system": 0.9744952321052551,
+        "coolant_temp_sensor": 0.00046977607416920364,
+        "throttle_position_sensor": 0.0003729258896782994,
+        "cold_start": 0.00044034095481038094
+      }
+    },
+    {
+      "elapsed_s": 600,
+      "label": "fuel_system",
+      "confidence": 0.9618685841560364,
+      "all_probs": {
+        "healthy": 0.0003862176963593811,
+        "air_system": 0.03633224591612816,
+        "fuel_system": 0.9618685841560364,
+        "coolant_temp_sensor": 0.0005489645409397781,
+        "throttle_position_sensor": 0.00039617979200556874,
+        "cold_start": 0.00046779855620115995
+      }
+    }
+  ],
+  "summary": {
+    "fault_window_count": 34,
+    "fault_fraction": 0.6181818181818182,
+    "label_counts": {
+      "healthy": 21,
+      "air_system": 3,
+      "fuel_system": 31
+    }
+  }
+}
