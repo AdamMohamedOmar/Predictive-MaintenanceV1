@@ -1,42 +1,42 @@
 {
   "LONG_TERM_FUEL_TRIM_BANK_1__mean": {
     "pid": "LONG_TERM_FUEL_TRIM_BANK_1__mean",
-    "mae_z": 2.8972848434890133,
-    "mae_persistence_baseline_z": 0.4917442713494713,
+    "mae_z": 1.1516996756162898,
+    "mae_persistence_baseline_z": 0.4917442713494712,
     "beats_persistence": false,
     "n_train": 1380,
     "n_test": 363,
-    "target_mean_z": -1.9571387895359864,
-    "target_std_z": 2.4378920383017904
+    "target_mean_z": 0.09654510401906093,
+    "target_std_z": 0.6926435074782805
   },
   "INTAKE_MANIFOLD_PRESSURE__mean": {
     "pid": "INTAKE_MANIFOLD_PRESSURE__mean",
-    "mae_z": 0.7942933013263287,
+    "mae_z": 0.7727613749848933,
     "mae_persistence_baseline_z": 0.8000120489441934,
     "beats_persistence": true,
     "n_train": 1380,
     "n_test": 363,
-    "target_mean_z": -0.32134411898317417,
-    "target_std_z": 1.0177079634879231
+    "target_mean_z": -0.05530086436057736,
+    "target_std_z": 1.067903086790226
   },
   "COOLANT_TEMPERATURE__mean": {
     "pid": "COOLANT_TEMPERATURE__mean",
-    "mae_z": 0.054765580301773045,
+    "mae_z": 0.04978277379184651,
     "mae_persistence_baseline_z": 0.11207162600403557,
     "beats_persistence": true,
     "n_train": 1380,
     "n_test": 363,
-    "target_mean_z": 0.26631381373543106,
-    "target_std_z": 0.783918849665557
+    "target_mean_z": 0.07211309271975175,
+    "target_std_z": 0.1492959656649791
   },
   "THROTTLE_TO_PEDAL_RATIO": {
     "pid": "THROTTLE_TO_PEDAL_RATIO",
-    "mae_z": 0.9072237900933112,
+    "mae_z": 0.8287224524828259,
     "mae_persistence_baseline_z": 0.9030305750009608,
-    "beats_persistence": false,
+    "beats_persistence": true,
     "n_train": 1380,
     "n_test": 363,
-    "target_mean_z": 0.3064664133548594,
-    "target_std_z": 1.224826892916385
+    "target_mean_z": -0.09137747019171083,
+    "target_std_z": 1.2053210902735922
   }
 }

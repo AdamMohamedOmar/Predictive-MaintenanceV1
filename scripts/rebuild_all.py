@@ -3,9 +3,11 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # 1. Build classifier dataset
+# P2-2: magnitude_jitter draws a per-(session,fault) severity/shape so the
+# classifier sees a continuum of degradation rather than one fixed fault shape.
 from src.features.dataset_builder import build_dataset, load_dataset
 print("=== Building classifier dataset ===")
-ds = build_dataset()
+ds = build_dataset(magnitude_jitter=(0.6, 1.4))  # centred on the validated default magnitude (±40%)
 print(f"Dataset: {len(ds)} windows, {ds['label'].value_counts().to_dict()}")
 
 # 2. Session split and normalizer

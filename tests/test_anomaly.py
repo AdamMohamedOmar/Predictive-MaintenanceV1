@@ -21,14 +21,14 @@ from src.models.anomaly import AnomalyDetector
 # ─── Synthetic fixture ──────────────────────────────────────────────────────
 
 
-def _make_dataset(n_healthy: int = 400, n_fault: int = 80) -> pd.DataFrame:
+def _make_dataset(n_healthy: int = 400, n_fault: int = 80, seed: int = 42) -> pd.DataFrame:
     """Tiny in-memory dataset for unit tests.
 
     Healthy rows: N(0, 1) per continuous feature, regime one-hot = CRUISE.
     Fault rows: same baseline + a strong (+5σ) bias on LTFT features so
     they're unambiguously out-of-distribution.
     """
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(seed)
     cols = feature_names()
     regime_cols = regime_feature_names()
     continuous = [c for c in cols if c not in set(regime_cols)]
@@ -100,6 +100,23 @@ def test_score_in_unit_range():
 
 
 # ─── Sanity (separation on synthetic anomalies) ────────────────────────────
+
+
+def test_fpr_budget_limits_false_alarms():
+    """P1-4: with a 1 % budget, ≤ ~1 % of fresh healthy windows reach the alarm
+    ceiling. The old p95 calibration maxed out ~5 % of healthy by design.
+    """
+    train = _make_dataset(n_healthy=2000, n_fault=0, seed=1)
+    norm = BaselineNormalizer().fit(train)
+    det = AnomalyDetector(n_estimators=120, random_seed=0, fpr_budget=0.01).fit(train, norm)
+
+    fresh = _make_dataset(n_healthy=2000, n_fault=0, seed=999)  # same dist, unseen draw
+    scores = det.score_batch(fresh, norm)
+    fpr = float((scores >= 0.99).mean())
+    assert fpr <= 0.03, (
+        f"Healthy false-positive rate {fpr:.3f} exceeds the 1 % budget (+margin). "
+        f"The FPR-budget calibration is not holding."
+    )
 
 
 def test_fault_scores_separate_from_healthy():

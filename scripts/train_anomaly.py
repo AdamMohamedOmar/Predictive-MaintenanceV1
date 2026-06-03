@@ -43,8 +43,28 @@ from src.features.dataset_builder import load_dataset
 from src.features.extractor import extract_features
 from src.features.normalizer import BaselineNormalizer
 from src.features.windowing import sliding_windows
-from src.models.anomaly import AnomalyDetector
+from src.models.anomaly import AnomalyDetector, FAULT_BEARING_FEATURES
 from src.models.classifier import session_split
+
+_FPR_BUDGET = 0.01  # design false-positive rate (P1-4)
+
+
+def _bootstrap_auc_ci(
+    y_true: np.ndarray, y_score: np.ndarray, *, n_boot: int = 1000, seed: int = 42
+) -> tuple[float, float]:
+    """95 % bootstrap CI for AUC (P1-4): a point estimate on a few hundred
+    windows has wide error bars; report the interval instead."""
+    rng = np.random.default_rng(seed)
+    n = len(y_true)
+    aucs: list[float] = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        if len(np.unique(y_true[idx])) < 2:
+            continue  # a resample with one class has no defined AUC
+        aucs.append(float(roc_auc_score(y_true[idx], y_score[idx])))
+    if not aucs:
+        return float("nan"), float("nan")
+    return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
 
 
 def _evaluate_on_mock(
@@ -128,7 +148,14 @@ def main() -> int:
     norm = BaselineNormalizer().fit(train_df)
 
     log.info("Fitting IsolationForest on healthy training windows …")
-    detector = AnomalyDetector(n_estimators=200, random_seed=42).fit(train_df, norm)
+    # P1-4: FPR-budget calibration + fault-bearing feature subset (the 83
+    # z-features dilute the few discriminative axes inside the IsolationForest).
+    detector = AnomalyDetector(
+        n_estimators=200,
+        random_seed=42,
+        fpr_budget=_FPR_BUDGET,
+        feature_subset=FAULT_BEARING_FEATURES,
+    ).fit(train_df, norm)
     log.info("  fitted on %d healthy windows", (train_df["label"] == "healthy").sum())
 
     # ── Sanity evaluation on held-out test split ─────────────────────────
@@ -156,6 +183,10 @@ def main() -> int:
     )
     y_score = np.concatenate([healthy_scores, fault_scores])
     test_auc = float(roc_auc_score(y_true, y_score))
+    auc_lo, auc_hi = _bootstrap_auc_ci(y_true, y_score)
+
+    # Realised healthy false-positive rate at the alarm ceiling (P1-4 budget).
+    test_healthy_fpr = float((healthy_scores >= 0.99).mean())
 
     # ── Step-2 mock fixture (plumbing-only — same loop, different costume) ──
     mock_path = _REPO / "data" / "real_faults" / "mock" / "mock_lean_fault.csv"
@@ -174,6 +205,10 @@ def main() -> int:
         "test_fault_p5_score": float(np.percentile(fault_scores, 5)),
         "score_separation": float(fault_scores.mean() - healthy_scores.mean()),
         "test_auc_healthy_vs_any_fault": test_auc,
+        "test_auc_95ci": [auc_lo, auc_hi],
+        "fpr_budget": _FPR_BUDGET,
+        "test_healthy_fpr_at_0.99": test_healthy_fpr,
+        "feature_subset": FAULT_BEARING_FEATURES,
         "per_class": per_class,
         "mock_fixture": mock_metrics,
         "note": (
@@ -201,7 +236,8 @@ def main() -> int:
     log.info("  Test healthy score mean: %.3f", results["test_healthy_mean_score"])
     log.info("  Test fault   score mean: %.3f", results["test_fault_mean_score"])
     log.info("  Separation: %.3f", results["score_separation"])
-    log.info("  Test AUC (healthy vs any-fault): %.3f", test_auc)
+    log.info("  Test AUC (healthy vs any-fault): %.3f  95%% CI [%.3f, %.3f]", test_auc, auc_lo, auc_hi)
+    log.info("  Healthy FPR at score≥0.99: %.3f  (budget %.2f)", test_healthy_fpr, _FPR_BUDGET)
     log.info("  Per class:")
     for lbl, r in per_class.items():
         log.info("    %-26s n=%4d  mean=%.3f  p95=%.3f", lbl, r["n"], r["mean_score"], r["p95_score"])

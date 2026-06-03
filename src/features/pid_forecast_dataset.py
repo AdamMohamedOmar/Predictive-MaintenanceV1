@@ -27,12 +27,16 @@ Inputs
 Output columns
 --------------
 * All 83 base feature columns (same as the classifier dataset).
-* ``target_{PID}`` columns — one per target PID, raw value, NOT z-scored.
+* ``target_{PID}`` columns — one per target PID, the **DELTA** (future − now)
+  in raw units (P1-3). Forecasting the change rather than the absolute level
+  cancels the per-session/per-vehicle baseline offset, so the model is not
+  doomed to lose to persistence under the exact baseline shift this project
+  exists to handle.
 * ``session_id`` — for the session-level split.
 
-The forecaster's `fit()` z-scores targets using the same BaselineNormalizer
-that z-scores the inputs, so cross-vehicle generalisation rides on the
-same baseline-capture path as the classifier.
+The forecaster scales the delta target by each PID's healthy σ (from the same
+BaselineNormalizer that z-scores the inputs) and reconstructs the absolute
+level at inference as ``current + predicted_delta``.
 """
 
 from __future__ import annotations
@@ -117,8 +121,15 @@ def build_pid_forecast_dataset(
             future = feats_seq[i + _HORIZON_STEPS]
 
             row = dict(now)
+            # P1-3: target is the DELTA (future − now), not the absolute level.
+            # Forecasting the absolute z-value made the model regress toward the
+            # training mean on sessions whose baseline is offset, losing to a
+            # naive persistence baseline by 6× on LTFT. Predicting the change
+            # cancels the per-session/per-vehicle baseline offset — exactly the
+            # shift this project must handle. The level is reconstructed at
+            # inference as current + predicted_delta.
             for pid in TARGET_PIDS:
-                row[f"target_{pid}"] = float(future[pid])
+                row[f"target_{pid}"] = float(future[pid]) - float(now[pid])
             row["session_id"] = session_id
             all_rows.append(row)
 

@@ -51,8 +51,29 @@ from src.config import RANDOM_SEED
 from src.features.normalizer import BaselineNormalizer, normalised_feature_names
 
 
+# A curated fault-bearing feature subset (P1-4): the dimensions that actually
+# move under the four faults — trims, MAP, warm-up rate, idle RPM drift, TPS.
+# Most of the 83 z-features are healthy-invariant and only dilute these few
+# discriminative axes inside the IsolationForest.  Pass as ``feature_subset``
+# to score on these alone.
+FAULT_BEARING_FEATURES: list[str] = [
+    "LONG_TERM_FUEL_TRIM_BANK_1__mean",
+    "SHORT_TERM_FUEL_TRIM_BANK_1__mean",
+    "FUEL_TRIM_DIVERGENCE",
+    "INTAKE_MANIFOLD_PRESSURE__mean",
+    "MAP_PER_THROTTLE",
+    "COOLANT_TEMPERATURE__mean",
+    "COOLANT_WARMUP_RATE",
+    "RPM_IDLE_DRIFT",
+    "ENGINE_RPM__mean",
+    "THROTTLE_TO_PEDAL_RATIO",
+    "THROTTLE_CMD_ACTUAL_DELTA",
+    "TIMING_VS_TEMP",
+]
+
+
 class AnomalyDetector:
-    """IsolationForest with a calibrated [0, 1] score map.
+    """IsolationForest with an FPR-budget-calibrated [0, 1] score map.
 
     Parameters
     ----------
@@ -65,6 +86,16 @@ class AnomalyDetector:
         sklearn's internal offset, not our normalized score.
     random_seed : int
         Tree-construction RNG seed.
+    fpr_budget : float
+        Design false-positive rate (P1-4). ``score = 1.0`` is mapped to the
+        ``(1 − fpr_budget)`` healthy percentile, so by construction only this
+        fraction of healthy windows max out the score. The old code mapped the
+        95th percentile to 1.0, guaranteeing ~5 % healthy false alarms; the
+        IsolationForest score distribution is non-Gaussian, so a percentile
+        budget (not a σ rule) is the correct calibration.
+    feature_subset : list[str] or None
+        Base feature names to score on. None → all 83. Pass
+        ``FAULT_BEARING_FEATURES`` to concentrate on discriminative axes.
     """
 
     def __init__(
@@ -72,13 +103,23 @@ class AnomalyDetector:
         n_estimators: int = 200,
         contamination: Union[float, str] = "auto",
         random_seed: int = RANDOM_SEED,
+        fpr_budget: float = 0.01,
+        feature_subset: list[str] | None = None,
     ) -> None:
         self._model: IsolationForest | None = None
         self._n_estimators = n_estimators
         self._contamination = contamination
         self._random_seed = random_seed
-        self._score_p5: float | None = None
-        self._score_p95: float | None = None
+        self._fpr_budget = fpr_budget
+        self._feature_subset = feature_subset
+        self._score_lo: float | None = None
+        self._score_hi: float | None = None
+
+    def _z_cols(self) -> list[str]:
+        """Resolve the z-scored columns to score on (subset or all)."""
+        if self._feature_subset is None:
+            return normalised_feature_names()
+        return [f"{c}__z" for c in self._feature_subset]
 
     # ── Fit ──────────────────────────────────────────────────────────────
 
@@ -107,7 +148,7 @@ class AnomalyDetector:
             )
 
         norm_df = norm.transform(healthy_df)
-        z_cols = normalised_feature_names()
+        z_cols = self._z_cols()
         X = norm_df[z_cols].to_numpy(dtype=float)
 
         # Held-out calibration split: 80 % fit, 20 % calibrate. Scoring the
@@ -123,8 +164,7 @@ class AnomalyDetector:
 
         # n_jobs=1 (not -1): joblib's CPU-counting via psutil is broken on
         # some Windows venvs (AttributeError: module 'psutil' has no
-        # attribute 'Process'). IsolationForest on ~2k rows × 83 features
-        # finishes in < 1 s single-threaded anyway.
+        # attribute 'Process'). IsolationForest finishes in < 1 s anyway.
         self._model = IsolationForest(
             n_estimators=self._n_estimators,
             contamination=self._contamination,
@@ -133,12 +173,13 @@ class AnomalyDetector:
         )
         self._model.fit(X[fit_idx])
 
-        # Negate decision_function so higher = more anomalous; calibrate
-        # on the held-out 20 % so 0.0 ↔ typical healthy, 1.0 ↔ unusual-for-
-        # healthy. Real anomalies push well past 1.0 before clipping.
+        # Negate decision_function so higher = more anomalous, then calibrate
+        # from a FALSE-ALARM BUDGET (P1-4): anchor 0.0 at the healthy median
+        # (clearly normal) and 1.0 at the (1 − fpr_budget) healthy percentile,
+        # so only ~fpr_budget of healthy windows reach the alarm ceiling.
         raw_cal = -self._model.decision_function(X[cal_idx])
-        self._score_p5 = float(np.percentile(raw_cal, 5))
-        self._score_p95 = float(np.percentile(raw_cal, 95))
+        self._score_lo = float(np.percentile(raw_cal, 50))
+        self._score_hi = float(np.percentile(raw_cal, 100.0 * (1.0 - self._fpr_budget)))
         return self
 
     # ── Score (single & batch) ───────────────────────────────────────────
@@ -173,18 +214,17 @@ class AnomalyDetector:
         """
         if self._model is None:
             raise RuntimeError("Call fit() before score_batch().")
-        if self._score_p5 is None or self._score_p95 is None:
+        if self._score_lo is None or self._score_hi is None:
             raise RuntimeError("Detector calibration missing — refit.")
 
         norm_df = norm.transform(features_df)
-        z_cols = normalised_feature_names()
-        X = norm_df[z_cols].to_numpy(dtype=float)
+        X = norm_df[self._z_cols()].to_numpy(dtype=float)
         raw = -self._model.decision_function(X)
-        span = self._score_p95 - self._score_p5
+        span = self._score_hi - self._score_lo
         if span <= 0:
             # Degenerate calibration (all percentiles equal) — neutral score.
             return np.full(len(features_df), 0.5)
-        return np.clip((raw - self._score_p5) / span, 0.0, 1.0)
+        return np.clip((raw - self._score_lo) / span, 0.0, 1.0)
 
     # ── Persistence ──────────────────────────────────────────────────────
 
@@ -199,11 +239,13 @@ class AnomalyDetector:
             raise RuntimeError("Cannot save an unfitted AnomalyDetector.")
         bundle: dict = {
             "model": self._model,
-            "score_p5": self._score_p5,
-            "score_p95": self._score_p95,
+            "score_lo": self._score_lo,
+            "score_hi": self._score_hi,
             "n_estimators": self._n_estimators,
             "contamination": self._contamination,
             "random_seed": self._random_seed,
+            "fpr_budget": self._fpr_budget,
+            "feature_subset": self._feature_subset,
         }
         with open(path, "wb") as f:
             pickle.dump(bundle, f)
@@ -216,10 +258,12 @@ class AnomalyDetector:
             n_estimators=bundle["n_estimators"],
             contamination=bundle["contamination"],
             random_seed=bundle["random_seed"],
+            fpr_budget=bundle.get("fpr_budget", 0.01),
+            feature_subset=bundle.get("feature_subset"),
         )
         det._model = bundle["model"]
-        det._score_p5 = bundle["score_p5"]
-        det._score_p95 = bundle["score_p95"]
+        det._score_lo = bundle["score_lo"]
+        det._score_hi = bundle["score_hi"]
         return det
 
     # ── Introspection ────────────────────────────────────────────────────

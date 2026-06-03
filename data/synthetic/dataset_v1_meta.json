@@ -1,5 +1,5 @@
 {
-  "n_samples": 5761,
+  "n_samples": 5736,
   "n_features": 83,
   "sessions": [
     "drive1.csv",
@@ -27,12 +27,12 @@
     "cold_start": 5
   },
   "class_counts": {
-    "air_system": 991,
+    "air_system": 1016,
     "cold_start": 183,
-    "coolant_temp_sensor": 991,
-    "fuel_system": 991,
+    "coolant_temp_sensor": 913,
+    "fuel_system": 989,
     "healthy": 1614,
-    "throttle_position_sensor": 991
+    "throttle_position_sensor": 1021
   },
   "injection": {
     "mode": "ramp",

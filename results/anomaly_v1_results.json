@@ -1,18 +1,38 @@
 {
   "n_train_healthy": 1268,
   "n_test_healthy": 346,
-  "n_test_fault": 853,
-  "test_healthy_mean_score": 0.675097246515031,
+  "n_test_fault": 820,
+  "test_healthy_mean_score": 0.6444481208018237,
   "test_healthy_p95_score": 1.0,
-  "test_fault_mean_score": 0.8397472428529966,
-  "test_fault_p5_score": 0.45173594117323346,
-  "score_separation": 0.16464999633796562,
-  "test_auc_healthy_vs_any_fault": 0.7161378744858338,
+  "test_fault_mean_score": 0.8033608021200849,
+  "test_fault_p5_score": 0.3066567834611119,
+  "score_separation": 0.1589126813182612,
+  "test_auc_healthy_vs_any_fault": 0.6894226702382631,
+  "test_auc_95ci": [
+    0.6565000293021246,
+    0.7211090285490419
+  ],
+  "fpr_budget": 0.01,
+  "test_healthy_fpr_at_0.99": 0.15606936416184972,
+  "feature_subset": [
+    "LONG_TERM_FUEL_TRIM_BANK_1__mean",
+    "SHORT_TERM_FUEL_TRIM_BANK_1__mean",
+    "FUEL_TRIM_DIVERGENCE",
+    "INTAKE_MANIFOLD_PRESSURE__mean",
+    "MAP_PER_THROTTLE",
+    "COOLANT_TEMPERATURE__mean",
+    "COOLANT_WARMUP_RATE",
+    "RPM_IDLE_DRIFT",
+    "ENGINE_RPM__mean",
+    "THROTTLE_TO_PEDAL_RATIO",
+    "THROTTLE_CMD_ACTUAL_DELTA",
+    "TIMING_VS_TEMP"
+  ],
   "per_class": {
     "air_system": {
-      "n": 206,
-      "mean_score": 0.7798477210489638,
-      "p50_score": 0.8192242586952962,
+      "n": 235,
+      "mean_score": 0.5927539629933647,
+      "p50_score": 0.5824548270751911,
       "p95_score": 1.0
     },
     "cold_start": {
@@ -22,27 +42,27 @@
       "p95_score": 1.0
     },
     "coolant_temp_sensor": {
-      "n": 206,
-      "mean_score": 0.9425950640434987,
+      "n": 205,
+      "mean_score": 0.9565279199627219,
       "p50_score": 1.0,
       "p95_score": 1.0
     },
     "fuel_system": {
-      "n": 206,
-      "mean_score": 0.721698339276914,
-      "p50_score": 0.7480514220079755,
+      "n": 163,
+      "mean_score": 0.7275808369325995,
+      "p50_score": 0.7602385593242439,
       "p95_score": 1.0
     },
     "healthy": {
       "n": 346,
-      "mean_score": 0.675097246515031,
-      "p50_score": 0.6579582771899877,
+      "mean_score": 0.6444481208018237,
+      "p50_score": 0.6394861097720639,
       "p95_score": 1.0
     },
     "throttle_position_sensor": {
-      "n": 206,
-      "mean_score": 0.8922879928811381,
-      "p50_score": 0.9559168796683764,
+      "n": 188,
+      "mean_score": 0.9349722150141333,
+      "p50_score": 1.0,
       "p95_score": 1.0
     }
   },
@@ -50,9 +70,9 @@
     "n_windows": 55,
     "n_pre_bias": 20,
     "n_post_bias": 35,
-    "pre_bias_mean_score": 0.7069149735380849,
-    "post_bias_mean_score": 0.6029966158878098,
-    "auc": 0.37,
+    "pre_bias_mean_score": 0.6884516606243236,
+    "post_bias_mean_score": 0.7190491469256899,
+    "auc": 0.5335714285714286,
     "note": "Plumbing AUC, not detection AUC. The mock fixture biases the same PIDs the injector biases (see data/real_faults/README.md). Real-fault AUC will be computed against Skoda data per docs/REAL_FAULT_COLLECTION.md."
   },
   "note": "Not real-fault validation. The fault windows come from the same injector that the classifier trains on; a clean separation here proves the detector wires up, not that it detects real faults. Real-fault validation pending data per docs/REAL_FAULT_COLLECTION.md."

@@ -53,6 +53,38 @@ def audit_file(path: Path) -> dict:
     return result
 
 
+def audit_catalyst_temp(usable_files: list[Path]) -> dict:
+    """Report CATALYST_TEMPERATURE variance across the usable files (P2-2).
+
+    Cat temp is currently DROPPED from USEFUL_PIDS. If it carries real
+    combustion/exhaust signal it could corroborate the coolant (rich-running)
+    and a future O2 fault. This reports whether it varies usefully so the
+    add-to-USEFUL_PIDS decision is evidence-based.
+    """
+    col = "CATALYST_TEMPERATURE_BANK1_SENSOR1 ()"
+    stats = {"pid": col, "per_file": {}, "varies_usefully": False}
+    stds = []
+    for p in usable_files:
+        df = pd.read_csv(p)
+        if col not in df.columns:
+            continue
+        s = df[col].dropna()
+        if len(s) == 0:
+            continue
+        std = float(s.std())
+        stds.append(std)
+        stats["per_file"][p.name] = {
+            "min": float(s.min()), "max": float(s.max()),
+            "mean": float(s.mean()), "std": std,
+        }
+    if stds:
+        stats["median_std"] = float(pd.Series(stds).median())
+        # "Varies usefully" = typical within-file σ above a few °C (not a flat
+        # sentinel). 88 °C-class spread → clearly informative.
+        stats["varies_usefully"] = stats["median_std"] > 5.0
+    return stats
+
+
 def main() -> int:
     if not DATA_CAROBD_DIR.exists():
         print(f"!! carOBD data directory not found: {DATA_CAROBD_DIR}", file=sys.stderr)
@@ -84,6 +116,22 @@ def main() -> int:
     for f in usable:
         print(f"  {f}")
     print(f"\nTotal usable files: {len(usable)}")
+
+    # ── P2-2: catalyst-temperature variance audit ───────────────────────────
+    usable_paths = [DATA_CAROBD_DIR / f for f in usable]
+    cat = audit_catalyst_temp(usable_paths)
+    print("\nCATALYST_TEMPERATURE_BANK1_SENSOR1 variance (P2-2 audit):")
+    if cat.get("median_std") is not None:
+        print(f"  median within-file σ = {cat['median_std']:.1f} °C")
+        print(f"  varies usefully: {cat['varies_usefully']}")
+        print(
+            "  NOTE: it varies, so it likely carries combustion/exhaust signal. "
+            "Adding it to USEFUL_PIDS is DEFERRED — it would change the 83-feature "
+            "contract every model/normalizer/test depends on, so it belongs in a "
+            "dedicated feature-expansion change, not bundled with the physics fixes."
+        )
+    else:
+        print("  column absent or empty in usable files")
 
     return 0
 

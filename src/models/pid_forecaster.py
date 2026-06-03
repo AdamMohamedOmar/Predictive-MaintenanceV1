@@ -66,11 +66,12 @@ _FEAT_COLS = normalised_feature_names()
 
 
 def _zscore_target(raw_values: np.ndarray, norm: BaselineNormalizer, pid: str) -> np.ndarray:
-    """Z-score one target PID using the normalizer's stored stats.
+    """Z-score one target PID LEVEL using the normalizer's stored stats.
 
     The target PID is always one of the continuous (non-regime) base
     features, so its mean and scale live in the StandardScaler's
     ``mean_`` and ``scale_`` arrays indexed by ``_CONTINUOUS_COLS``.
+    Used to put an absolute LEVEL on the same z-frame as the input features.
     """
     if norm._scaler is None:
         raise RuntimeError("Normalizer must be fitted before z-scoring targets.")
@@ -80,6 +81,22 @@ def _zscore_target(raw_values: np.ndarray, norm: BaselineNormalizer, pid: str) -
     if scale == 0.0:
         return np.zeros_like(raw_values, dtype=float)
     return (raw_values.astype(float) - mean) / scale
+
+
+def _scale_delta(raw_delta: np.ndarray, norm: BaselineNormalizer, pid: str) -> np.ndarray:
+    """Scale a DELTA target by the PID's healthy σ only — NO mean-centering.
+
+    A delta (future − now) is a difference, so it has no baseline offset to
+    remove; dividing by σ alone puts it on the same per-σ scale as the
+    z-scored inputs while keeping "no change" mapped to exactly 0 (P1-3).
+    """
+    if norm._scaler is None:
+        raise RuntimeError("Normalizer must be fitted before scaling deltas.")
+    idx = _CONTINUOUS_COLS.index(pid)
+    scale = float(norm._scaler.scale_[idx])
+    if scale == 0.0:
+        return np.zeros_like(raw_delta, dtype=float)
+    return raw_delta.astype(float) / scale
 
 
 # ─── Session split (mirrors classifier & legacy forecaster) ──────────────────
@@ -120,10 +137,11 @@ def _train_one(
     X_train = train_norm[_FEAT_COLS].to_numpy(dtype=float)
     X_test = test_norm[_FEAT_COLS].to_numpy(dtype=float)
 
-    y_train = _zscore_target(
+    # P1-3: the target is a DELTA (future − now). Scale by σ only.
+    y_train = _scale_delta(
         train_df[f"target_{pid}"].to_numpy(dtype=float), norm, pid
     )
-    y_test = _zscore_target(
+    y_test = _scale_delta(
         test_df[f"target_{pid}"].to_numpy(dtype=float), norm, pid
     )
 
@@ -143,16 +161,12 @@ def _train_one(
     y_pred = reg.predict(X_test)
     mae_z = float(mean_absolute_error(y_test, y_pred))
 
-    # Persistence baseline: predict "PID stays at its current value".
-    # The current-window PID is feature index in feat_cols, but we use the
-    # z-scored *input* feature directly because target and input share
-    # the same z-score frame for these continuous PIDs.
-    z_input_col = f"{pid}__z"
-    if z_input_col in test_norm.columns:
-        y_persist = test_norm[z_input_col].to_numpy(dtype=float)
-        mae_persist = float(mean_absolute_error(y_test, y_persist))
-    else:
-        mae_persist = float("nan")
+    # Persistence baseline: predict "PID does not change" → delta = 0.
+    # Because the target is now a delta, persistence is the zero vector, and
+    # mae_persist = mean(|delta_z|). The model must beat THIS to earn its keep
+    # (predicting the change must be better than predicting no change).
+    y_persist = np.zeros_like(y_test)
+    mae_persist = float(mean_absolute_error(y_test, y_persist))
 
     results = {
         "pid": pid,
@@ -243,7 +257,11 @@ class PIDForecaster:
     # ── Prediction ────────────────────────────────────────────────────────
 
     def predict_pid_values(self, features: dict[str, float]) -> dict[str, float]:
-        """Predict z-scored PID values at t + 60s for each target.
+        """Predict the z-scored PID LEVEL at t + 60s for each target.
+
+        The models predict a z-scaled DELTA (P1-3); this reconstructs the
+        absolute level as ``current_z + predicted_delta_z`` so callers still
+        get a level on the same z-frame as the input features.
 
         Parameters
         ----------
@@ -253,7 +271,7 @@ class PIDForecaster:
         Returns
         -------
         dict
-            ``{pid: predicted_z_value}`` — one entry per target PID.
+            ``{pid: predicted_future_z_level}`` — one entry per target PID.
         """
         row_df = pd.DataFrame([features])
         row_norm = self._norm.transform(row_df)
@@ -261,7 +279,9 @@ class PIDForecaster:
         out: dict[str, float] = {}
         for pid, model in self._models.items():
             try:
-                out[pid] = float(model.predict(X)[0])
+                delta_z = float(model.predict(X)[0])
+                current_z = float(row_norm[f"{pid}__z"].iloc[0])
+                out[pid] = current_z + delta_z  # reconstruct the level
             except Exception as exc:
                 log.warning("predict_pid_values: %s model failed (%s)", pid, exc)
                 out[pid] = float("nan")

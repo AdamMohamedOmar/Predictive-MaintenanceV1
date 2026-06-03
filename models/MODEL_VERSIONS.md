@@ -33,24 +33,26 @@ floor in the paper. Not the centrepiece of v2 framing.
 
 | Version | Date | Class | Target | Notes |
 |---|---|---|---|---|
-| **v1** | 29 May 2026 | `src.models.pid_forecaster.PIDForecaster` | Four z-scored next-window PID values (LTFT, MAP, coolant, throttle-to-pedal ratio) at t + 60 s | Built as the principled replacement for `forecaster_v1.pkl`'s severity target. Trained on healthy carOBD windows only — no fault labels, no severity formula, no injector inverse. Health-residual = ‖predicted_z − actual_z‖ per PID. |
+| **v1** | 29 May 2026 | `src.models.pid_forecaster.PIDForecaster` | Next-window PID **DELTA** (future − now) for LTFT, MAP, coolant, throttle-to-pedal ratio at t + 60 s, scaled by each PID's healthy σ (P1-3) | Replaces `forecaster_v1.pkl`'s severity target. Trained on healthy carOBD windows only — no fault labels, no severity formula, no injector inverse. Forecasting the DELTA (not the absolute level) cancels the per-session baseline offset. Level reconstructed at inference as current + predicted_delta; health-residual = ‖predicted_level_z − actual_level_z‖ per PID. |
 
-**Initial training results** (`results/pid_forecaster_v1_results.json`):
+**Training results after the P1-3 delta retarget** (`results/pid_forecaster_v1_results.json`):
 
-| PID | MAE (z-units) | Persistence baseline | Verdict |
+| PID | MAE (z) | Persistence (predict Δ=0) | Verdict |
 |---|---:|---:|---|
-| `COOLANT_TEMPERATURE__mean` | 0.05 | 0.11 | beats persistence 2× |
-| `INTAKE_MANIFOLD_PRESSURE__mean` | 0.79 | 0.80 | tied with persistence |
-| `THROTTLE_TO_PEDAL_RATIO` | 0.91 | 0.90 | marginally worse |
-| `LONG_TERM_FUEL_TRIM_BANK_1__mean` | 2.90 | 0.49 | **dramatically worse — session-overfit** |
+| `COOLANT_TEMPERATURE__mean` | 0.05 | 0.11 | **beats** persistence 2× |
+| `INTAKE_MANIFOLD_PRESSURE__mean` | 0.77 | 0.80 | **beats** persistence |
+| `THROTTLE_TO_PEDAL_RATIO` | 0.83 | 0.90 | **beats** persistence (was losing pre-P1-3) |
+| `LONG_TERM_FUEL_TRIM_BANK_1__mean` | 1.15 | 0.49 | still worse (improved from 2.90) |
 
-**Honest finding for the paper:** healthy-only forecasting on a 60-s
-horizon works for slow thermal signals (coolant) but degrades sharply
-for ECU-state signals that encode session/vehicle-specific operating
-context (LTFT). A production deployment needs per-vehicle baseline-fit
-of the forecaster, or a hybrid "predict residual relative to per-vehicle
-baseline" approach. This is the same cross-session generalisation
-problem the anomaly detector exhibits (`results/anomaly_v1_results.json`).
+**Honest finding for the paper:** the delta retarget (P1-3) flipped MAP and
+the throttle ratio from tied/losing to **beating** persistence, and roughly
+halved the LTFT error — but LTFT **still does not beat** the persistence
+baseline. That is itself a legitimate result: a healthy engine's LTFT barely
+moves over 60 s, so "predict no change" is near-optimal and a learned model
+only adds variance. LTFT forecasting is reported as **explored, did not beat
+baseline**; the other three PIDs are shipped. The remaining LTFT gap is the
+same cross-session generalisation limit the anomaly detector shows
+(`results/anomaly_v1_results.json`) — addressed by per-vehicle baseline re-fit.
 
 ---
 

@@ -22,8 +22,9 @@ duplicate healthy examples.
 Output
 ------
 A single parquet file at data/synthetic/dataset_v1.parquet with columns:
-  <feature_name_0>, …, <feature_name_72>, label (str), label_id (int),
-  session_id (str), fault_type (str)
+  <feature_name_0>, …, <feature_name_82>  (83 features), label (str),
+  label_id (int), session_id (str), fault_type (str),
+  injected_magnitude (float; 0.0 for healthy/cold_start rows)
 
 A companion metadata JSON is saved alongside the parquet file.
 """
@@ -69,6 +70,26 @@ _RAMP_FRAC  = 0.15
 _NOISE_STD  = INJECTION_NOISE_STD  # centralised in config.py
 
 
+def jitter_injection(
+    base_magnitude: float,
+    onset_fraction: float,
+    ramp_fraction: float,
+    jitter: tuple[float, float],
+    rng: "np.random.Generator",
+) -> tuple[float, float, float]:
+    """Draw a randomised (magnitude, onset_fraction, ramp_fraction) (P2-2).
+
+    Magnitude is base × U(lo, hi); onset and ramp are nudged within sane bands
+    so each injection has a different severity AND shape. Bounds keep the
+    fractions inside [0.20, 0.60] (onset) and [0.08, 0.35] (ramp).
+    """
+    lo, hi = jitter
+    mag = base_magnitude * float(rng.uniform(lo, hi))
+    onset = float(np.clip(onset_fraction + rng.uniform(-0.10, 0.10), 0.20, 0.60))
+    ramp = float(np.clip(ramp_fraction + rng.uniform(-0.05, 0.10), 0.08, 0.35))
+    return mag, onset, ramp
+
+
 def build_dataset(
     carobd_dir: Path | None = None,
     output_dir: Path | None = None,
@@ -78,6 +99,7 @@ def build_dataset(
     onset_fraction: float = _ONSET_FRAC,
     ramp_fraction: float = _RAMP_FRAC,
     magnitudes: dict[str, float] | None = None,
+    magnitude_jitter: tuple[float, float] | None = None,
     output_name: str = "dataset_v1",
 ) -> pd.DataFrame:
     """Build the labelled feature dataset from carOBD files and save it.
@@ -98,6 +120,13 @@ def build_dataset(
         faults from a DIFFERENT generator configuration than the training set.
     magnitudes : dict or None
         Per-fault magnitude override.  None → injector defaults.
+    magnitude_jitter : (float, float) or None
+        If given, each (session, fault) injection draws an independent
+        magnitude = base × U(lo, hi) and jittered onset/ramp fractions, so the
+        classifier sees a CONTINUUM of fault severities and shapes rather than
+        one fixed shape per fault (P2-2 — PdM is about a degradation continuum).
+        None → fixed magnitude/onset/ramp (deterministic; used by the
+        withheld-coefficient eval so its configs stay clean).
     output_name : str
         Stem for the output parquet / metadata files (default ``dataset_v1``).
         The withheld-eval config writes a separate ``dataset_configB`` so it
@@ -138,16 +167,25 @@ def build_dataset(
             row["label_id"] = LABEL_TO_ID[label]
             row["session_id"] = session_id
             row["fault_type"] = label
+            row["injected_magnitude"] = 0.0
             all_rows.append(row)
 
         # ── Fault windows (one pass per fault type) ───────────────────────
-        for fault in FAULT_TYPES:
+        for fault_idx, fault in enumerate(FAULT_TYPES):
+            base_mag = (magnitudes or _DEFAULT_MAGNITUDE)[fault]
+            if magnitude_jitter is not None:
+                jrng = np.random.default_rng(session_seed * 100 + fault_idx)
+                mag, onset_f, ramp_f = jitter_injection(
+                    base_mag, onset_fraction, ramp_fraction, magnitude_jitter, jrng
+                )
+            else:
+                mag, onset_f, ramp_f = base_mag, onset_fraction, ramp_fraction
             df_faulty = inject_session(
                 df_clean,
                 fault,
-                onset_fraction=onset_fraction,
-                ramp_fraction=ramp_fraction,
-                magnitude=(magnitudes or {}).get(fault),
+                onset_fraction=onset_f,
+                ramp_fraction=ramp_f,
+                magnitude=mag,
                 noise_std=noise_std,
                 random_seed=session_seed,
             )
@@ -173,13 +211,14 @@ def build_dataset(
                 row["label_id"] = LABEL_TO_ID[label]
                 row["session_id"] = session_id
                 row["fault_type"] = fault
+                row["injected_magnitude"] = float(params.magnitude)
                 all_rows.append(row)
 
     dataset = pd.DataFrame(all_rows)
 
     # Ensure feature columns come first, metadata columns last
     feat_cols = feature_names()
-    meta_cols = ["label", "label_id", "session_id", "fault_type"]
+    meta_cols = ["label", "label_id", "session_id", "fault_type", "injected_magnitude"]
     dataset = dataset[feat_cols + meta_cols]
 
     out_path = output_dir / f"{output_name}.parquet"

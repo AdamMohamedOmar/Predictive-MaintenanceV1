@@ -94,8 +94,16 @@ def evaluate_real_fault(
     csv_path = Path(csv_path)
     df = _read_csv(csv_path)
 
-    pid_cols = [p for p in USEFUL_PIDS if p in df.columns]
-    rows = df[pid_cols].to_dict(orient="records")
+    # Tolerate a real adapter that doesn't expose all 14 PIDs: backfill any
+    # missing PID column with NaN so feature extraction still runs. The engine
+    # NaN-fills those features with the healthy baseline ("no signal → nominal")
+    # and counts them toward its degraded-PID warning.
+    import numpy as np
+
+    for pid in USEFUL_PIDS:
+        if pid not in df.columns:
+            df[pid] = np.nan
+    rows = df[list(USEFUL_PIDS)].to_dict(orient="records")
 
     if engine is None:
         engine = InferenceEngine(models_dir=models_dir)
@@ -123,6 +131,7 @@ def evaluate_real_fault(
                     "elapsed_s": int(state.elapsed_s),
                     "label": str(state.classifier_label),
                     "confidence": float(state.classifier_confidence),
+                    "anomaly_score": float(getattr(state, "anomaly_score", 0.0)),
                     "all_probs": {
                         str(k): float(v) for k, v in state.all_class_probs.items()
                     },

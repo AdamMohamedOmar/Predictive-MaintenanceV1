@@ -17,12 +17,16 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the 8-week execution plan.
 
 ## Headline numbers — what they actually measure
 
-The classifier's synthetic scores, taken straight from the committed artefacts:
+The classifier's **corrected-physics** synthetic scores (the git history shows the 0.965 → 0.80 drop when the speed-density air physics, the STFT→LTFT handoff, and the severity decoupling landed — the over-claim correcting itself):
 
-- **Fixed-holdout (drive1 + live12) macro-F1 = 0.965** — `results/xgb_classifier_v1_results.json`.
-- **LOSO mean macro-F1 = 0.957**, but the mean is misleading: it averages near-duplicate commute sessions (live5–live11 each ≈ 0.99) against the one genuinely different trip. The honest hard case is the lone highway session **drive1 = 0.82** (`results/loso_cv_results.json`, `min_f1`). We headline 0.82, not the mean.
+- **Fixed-holdout (drive1 + live12) macro-F1 = 0.80** — `results/xgb_classifier_v1_results.json`. Per-class: coolant 0.998, throttle 0.76, air 0.71, healthy 0.76, fuel 0.56, cold_start 1.0. (Fuel is hardest: the STFT→LTFT handoff plus mild jittered severities make developing fuel faults genuinely subtle.)
+- **LOSO mean = 0.85** with a large spread (σ ≈ 0.17): the near-duplicate commute sessions (live5–live9) score ≈ 0.98 while the structurally-different trips score far lower. The honest hard case is **live12 = 0.53** (`results/loso_cv_results.json`, `min_f1`). We headline 0.53, not the mean.
 
-All of these measure recovery of labels written by the deterministic injector in `src/injection/fault_injector.py`, scored against a severity metric that — in the current artefacts — mirrors the injector's own coefficients. Read them as a **synthetic self-consistency floor**, not real-fault detection. (The severity ↔ injector coupling is being removed; see the work tracked in `docs/CHARTER.md` §15.)
+These are still **synthetic** — faults are injected by `src/injection/fault_injector.py` — but they are no longer circular: severity is anchored to external diagnostic thresholds, not the injector's own coefficients (P0-2), and a withheld-coefficient evaluation (`scripts/eval_withheld_coeff.py`, `results/withheld_coeff_results.json`) measures transfer to a *different* generator configuration (gap ≈ 0.03). Read them as a synthetic baseline, not real-fault detection.
+
+Forecasting + anomaly (honest, mixed):
+- **PID forecaster** (delta target, P1-3) beats a persistence baseline on MAP, coolant, and throttle-to-pedal ratio; **LTFT does not** — its 60-second change is near-zero noise, so "predict no change" is near-optimal. Reported as explored-did-not-beat-baseline for LTFT.
+- **Anomaly detector** AUC 0.69 (95% CI [0.66, 0.72]). Its 1% false-alarm budget holds within-distribution but inflates to ~16% on held-out sessions — a quantified cross-session-shift limitation (charter R12), addressed by per-vehicle baseline re-fit.
 
 Real-fault detection is validated separately against induced-fault recordings collected per `docs/REAL_FAULT_COLLECTION.md` and scored by `src/eval/real_fault_eval.py`. The paper's headline real-fault metric is **vacuum-leak recall ≥ 0.60**.
 
@@ -114,7 +118,7 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 - **Vehicle-agnostic features.** All PID statistics are z-scored against the source vehicle's own healthy baseline, enabling cross-vehicle generalization (Etios → Skoda).
 - **Physics-respecting fault injection.** Every injected fault has a primary sensor effect AND a secondary ECU-response effect. See `docs/INJECTION_ENGINE.md` (Week 2 onwards).
 - **Honest framing.** The classifier's macro-F1 numbers measure recovery of the injector's own labels — see "Headline numbers" above. The forecaster is evaluated on injected early-stage faults, not run-to-failure data. Misfire detection is explicitly out of scope (1 Hz OBD-II cannot resolve per-cylinder combustion). See `docs/CHARTER.md` §11.
-- **Two classifiers, one in production.** `src/models/classifier.py` is the Random Forest baseline (Week 3); `src/models/xgb_classifier.py` is the production XGBoost model (Week 4, fixed-holdout macro-F1 = 0.965 / worst LOSO fold 0.82 — see "Headline numbers" above for what this measures). Both are kept in the repo so the thesis can report the RF→XGB improvement. The dashboard and live inference load exclusively from `models/xgb_classifier_v1.pkl`. The RF module also provides shared types (`ALL_LABELS`, `_HELD_OUT_SESSIONS`, `session_split`) imported by the XGBoost module.
+- **Two classifiers, one in production.** `src/models/classifier.py` is the Random Forest baseline (Week 3); `src/models/xgb_classifier.py` is the production XGBoost model (Week 4, corrected-physics fixed-holdout macro-F1 = 0.80 / worst LOSO fold 0.53 — see "Headline numbers" above for what this measures). Both are kept in the repo so the thesis can report the RF→XGB improvement. The dashboard and live inference load exclusively from `models/xgb_classifier_v1.pkl`. The RF module also provides shared types (`ALL_LABELS`, `_HELD_OUT_SESSIONS`, `session_split`) imported by the XGBoost module.
 
 ---
 
@@ -125,7 +129,7 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 | 1 | Config, data loader, project scaffold | ✅ Complete |
 | 2 | Fault injection engine (4 faults, ramp mode) | ✅ Complete |
 | 3 | Feature pipeline, Random Forest baseline | ✅ Complete |
-| 4 | XGBoost classifier (synthetic floor: 0.965 fixed-holdout, 0.82 worst LOSO fold), SHAP explainer | ✅ Complete |
+| 4 | XGBoost classifier (corrected-physics: 0.80 fixed-holdout, 0.53 worst LOSO fold), SHAP explainer | ✅ Complete |
 | 5 | FaultForecaster (4× XGBRegressor, 60 s horizon) | ✅ Complete |
 | 6 | Streamlit dashboard, live ELM327 integration, cross-vehicle baseline | ✅ Complete |
 | 7 | Live Skoda validation, polish | 🔄 In progress |

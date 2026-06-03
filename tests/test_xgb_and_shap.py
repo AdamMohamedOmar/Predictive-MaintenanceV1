@@ -220,5 +220,11 @@ def test_real_xgb_trains_without_error():
     train_df, test_df = session_split(ds)
     clf, norm = xgb_classifier.train(train_df, n_estimators=50, random_seed=42)
     results = xgb_classifier.evaluate(clf, norm, test_df)
-    # We expect this to meet the commit target
-    assert results["macro_f1"] >= 0.80
+    # Corrected-physics floor (not the old inflated 0.80+). Fixing the
+    # speed-density air physics, the STFT→LTFT handoff, and the severity
+    # decoupling — plus a jittered severity continuum that includes mild,
+    # genuinely-hard faults — honestly lowered the synthetic fixed-holdout
+    # macro-F1 to ≈ 0.80 at 300 trees (≈ 0.77 at the 50 trees used here).
+    # We guard the charter's Week-4 minimum of 0.70; the headline numbers and
+    # the per-class / worst-LOSO-fold story live in the README.
+    assert results["macro_f1"] >= 0.70

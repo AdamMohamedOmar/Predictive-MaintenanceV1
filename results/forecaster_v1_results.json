@@ -1,46 +1,46 @@
 {
   "air_system": {
     "fault_type": "air_system",
-    "mae": 0.09671571583520254,
-    "mae_pct_of_range": 9.671571583520254,
-    "meets_commit_target": true,
-    "meets_stretch_target": true,
-    "n_train": 797,
-    "n_test": 209,
-    "severity_target_mean": 0.812551951817779,
-    "severity_target_std": 0.1882403945725618
-  },
-  "fuel_system": {
-    "fault_type": "fuel_system",
-    "mae": 0.09336730898445518,
-    "mae_pct_of_range": 9.336730898445518,
-    "meets_commit_target": true,
-    "meets_stretch_target": true,
-    "n_train": 797,
-    "n_test": 209,
-    "severity_target_mean": 0.8014689360642904,
-    "severity_target_std": 0.19512536048363704
-  },
-  "coolant_temp_sensor": {
-    "fault_type": "coolant_temp_sensor",
-    "mae": 0.002142016701092891,
-    "mae_pct_of_range": 0.2142016701092891,
-    "meets_commit_target": true,
-    "meets_stretch_target": true,
-    "n_train": 797,
-    "n_test": 209,
-    "severity_target_mean": 0.0027817322850789633,
-    "severity_target_std": 0.028322708813474345
-  },
-  "throttle_position_sensor": {
-    "fault_type": "throttle_position_sensor",
-    "mae": 0.3334746459611793,
-    "mae_pct_of_range": 33.34746459611793,
+    "mae": 0.18593838686421185,
+    "mae_pct_of_range": 18.593838686421186,
     "meets_commit_target": false,
     "meets_stretch_target": false,
     "n_train": 797,
     "n_test": 209,
-    "severity_target_mean": 0.7194946336696945,
-    "severity_target_std": 0.38675786738859197
+    "severity_target_mean": 0.15105110024671137,
+    "severity_target_std": 0.24357924151052354
+  },
+  "fuel_system": {
+    "fault_type": "fuel_system",
+    "mae": 0.12436583206441293,
+    "mae_pct_of_range": 12.436583206441293,
+    "meets_commit_target": true,
+    "meets_stretch_target": false,
+    "n_train": 797,
+    "n_test": 209,
+    "severity_target_mean": 0.677357362520609,
+    "severity_target_std": 0.27523488224169046
+  },
+  "coolant_temp_sensor": {
+    "fault_type": "coolant_temp_sensor",
+    "mae": 0.006712781730475454,
+    "mae_pct_of_range": 0.6712781730475453,
+    "meets_commit_target": true,
+    "meets_stretch_target": true,
+    "n_train": 797,
+    "n_test": 209,
+    "severity_target_mean": 0.9537739116539464,
+    "severity_target_std": 0.1497857151456017
+  },
+  "throttle_position_sensor": {
+    "fault_type": "throttle_position_sensor",
+    "mae": 0.19571620850454152,
+    "mae_pct_of_range": 19.571620850454153,
+    "meets_commit_target": true,
+    "meets_stretch_target": false,
+    "n_train": 797,
+    "n_test": 209,
+    "severity_target_mean": 0.6320059919255642,
+    "severity_target_std": 0.29157404477757953
   }
 }

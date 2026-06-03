@@ -50,10 +50,12 @@ def _make_synthetic_pairs(n_per_session: int = 60, n_sessions: int = 4) -> pd.Da
             for rc in regime_cols:
                 row[rc] = 0.0
             row[regime_cols[4]] = 1.0  # CRUISE
-            # Targets are simple linear functions of the current PID values
-            # (+ small noise) so the model has a learnable signal.
+            # P1-3: target is a DELTA (future − now). Make it a LEARNABLE
+            # function of an input feature (+ small noise) so the model can
+            # beat the predict-zero-change persistence baseline — the property
+            # the real forecaster must have to be worth shipping.
             for pid in TARGET_PIDS:
-                row[f"target_{pid}"] = row[pid] + float(rng.normal(0.0, 0.1))
+                row[f"target_{pid}"] = 0.6 * row["ENGINE_LOAD__mean"] + float(rng.normal(0.0, 0.05))
             row["session_id"] = session_id
             rows.append(row)
     return pd.DataFrame(rows)
@@ -115,6 +117,29 @@ def test_train_all_pid_forecasters_returns_bundle():
     for pid in TARGET_PIDS:
         r = forecaster.results[pid]
         assert "mae_z" in r and "mae_persistence_baseline_z" in r
+
+
+def test_model_beats_persistence_on_learnable_delta():
+    """P1-3 mechanism: when the delta is learnable from features, the model
+    must beat the predict-zero-change persistence baseline.
+
+    This is exactly the property the old absolute-level target failed: it
+    regressed toward the training mean and lost to persistence by 6× on LTFT.
+    The delta target removes the baseline offset so a learnable signal is
+    actually recoverable.
+    """
+    ds = _make_synthetic_pairs(n_per_session=120, n_sessions=4)
+    ds["label"] = "healthy"
+    norm = BaselineNormalizer().fit(ds)
+    forecaster = train_all_pid_forecasters(
+        ds, norm, held_out={"sess_3"}, n_estimators=80, random_seed=0
+    )
+    for pid in TARGET_PIDS:
+        r = forecaster.results[pid]
+        assert r["beats_persistence"] is True, (
+            f"{pid}: model MAE {r['mae_z']:.3f} did not beat persistence "
+            f"{r['mae_persistence_baseline_z']:.3f} on a learnable delta."
+        )
 
 
 def test_predict_pid_values_returns_one_per_target():
