@@ -55,6 +55,12 @@ def _make_pretend_real_csv(dest_dir: Path) -> Path:
     return csv_path
 
 
+_AHMED_CSV = (
+    Path(__file__).resolve().parents[1]
+    / "data" / "real_faults" / "ahmed" / "ahmed_drive_20260602.csv"
+)
+
+
 @pytest.mark.skipif(not _MODELS_PRESENT, reason="trained models not present")
 @pytest.mark.skipif(not _RAW_DRIVE1.exists(), reason="drive1.csv not present")
 class TestHarnessReadiness:
@@ -66,12 +72,19 @@ class TestHarnessReadiness:
 
         assert result["n_rows"] == 900
         assert result["n_windows"] > 0
-        # Every window carries both a classifier label AND an anomaly score —
-        # the two detectors the real recording will be judged by.
+        # Every window carries the classifier label, anomaly score, severities
+        # and 60-s-ahead forecasts so testers can see the full picture.
         for w in result["windows"]:
             assert "label" in w
             assert "anomaly_score" in w
             assert 0.0 <= w["anomaly_score"] <= 1.0
+            # P1-2: severities and forecasts must be present and in [0, 1]
+            assert "severities" in w, "severities key missing from window dict"
+            assert "forecasts" in w, "forecasts key missing from window dict"
+            for v in w["severities"].values():
+                assert 0.0 <= v <= 1.0, f"severity out of [0,1]: {v}"
+            for v in w["forecasts"].values():
+                assert 0.0 <= v <= 1.0, f"forecast out of [0,1]: {v}"
         # Serialises cleanly (the harness writes this to disk in production).
         json.dumps(result)
 
@@ -97,3 +110,54 @@ class TestHarnessReadiness:
 
         result = evaluate_real_fault(csv_path)  # must not raise
         assert result["n_windows"] > 0
+
+    @pytest.mark.skipif(not _AHMED_CSV.exists(), reason="ahmed recording not present")
+    def test_normalizer_override_changes_label_distribution(self, tmp_path):
+        """Scoring with vs without a per-vehicle normalizer must produce different
+        label distributions — proving the override is actually being applied."""
+        from scripts.capture_baseline_from_csv import capture_baseline_from_csv
+        from src.dashboard.inference import InferenceEngine
+        from src.eval.real_fault_eval import evaluate_real_fault
+
+        # Build a normalizer from the first half of Ahmed's recording (warm + moving)
+        # The guard will pass because Ahmed's drive has coolant >= 75 C and speed > 0.
+        # If the guard fails (too cold/idle) fall back to the pretend-real CSV so the
+        # test still exercises the override plumbing.
+        norm_path = tmp_path / "ahmed_normalizer.pkl"
+        try:
+            capture_baseline_from_csv(
+                _AHMED_CSV, vehicle_name="ahmed_test", out_path=norm_path
+            )
+        except ValueError:
+            # Ahmed's recording doesn't pass the speed guard (mostly parked).
+            # Use the pretend-real CSV as a fallback baseline source.
+            from tests.test_capture_baseline_from_csv import _make_warm_driving_csv
+            warm_csv = _make_warm_driving_csv(tmp_path / "warm.csv")
+            capture_baseline_from_csv(
+                warm_csv, vehicle_name="ahmed_test", out_path=norm_path
+            )
+
+        csv_path = _make_pretend_real_csv(tmp_path / "skoda")
+
+        # Score without override
+        result_etios = evaluate_real_fault(csv_path)
+        counts_etios = result_etios["summary"]["label_counts"]
+
+        # Score with override — different normalizer → different z-scores → different labels
+        engine_override = InferenceEngine(normalizer_override=norm_path)
+        result_override = evaluate_real_fault(csv_path, engine=engine_override)
+        counts_override = result_override["summary"]["label_counts"]
+
+        # Both must produce valid JSON-serialisable output
+        json.dumps(result_etios)
+        json.dumps(result_override)
+
+        # Both must score some windows
+        assert result_etios["n_windows"] > 0
+        assert result_override["n_windows"] > 0
+
+        # At least one label count must differ — the override must have an effect
+        assert counts_etios != counts_override, (
+            "Normalizer override produced identical label distribution — "
+            "the override is not being applied."
+        )

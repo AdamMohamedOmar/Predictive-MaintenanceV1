@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
+from src.dashboard.inference import InferenceEngine
 from src.eval.real_fault_eval import evaluate_real_fault
 
 
@@ -45,6 +46,17 @@ def main() -> int:
         default=None,
         help="Output JSON path. Defaults to results/real_fault_eval/<stem>_v1.json.",
     )
+    parser.add_argument(
+        "--normalizer",
+        default=None,
+        metavar="PKL",
+        help=(
+            "Path to a per-vehicle normalizer .pkl (from capture_baseline_from_csv "
+            "or live_baseline_capture). When given, the classifier is re-centred on "
+            "THIS vehicle's healthy distribution instead of the Etios baseline. "
+            "Required for a meaningful cross-vehicle score."
+        ),
+    )
     args = parser.parse_args()
 
     csv_path = Path(args.csv)
@@ -52,8 +64,19 @@ def main() -> int:
         log.error("CSV not found: %s", csv_path)
         return 1
 
+    # Build the engine here so the normalizer override can be passed cleanly.
+    # evaluate_real_fault accepts engine= and skips its own construction when given.
+    engine_kwargs: dict = {}
+    if args.normalizer:
+        norm_path = Path(args.normalizer)
+        if not norm_path.exists():
+            log.error("Normalizer not found: %s", norm_path)
+            return 1
+        engine_kwargs["engine"] = InferenceEngine(normalizer_override=norm_path)
+        log.info("Using normalizer override: %s", norm_path)
+
     log.info("Evaluating %s …", csv_path)
-    result = evaluate_real_fault(csv_path)
+    result = evaluate_real_fault(csv_path, **engine_kwargs)
 
     out_path = (
         Path(args.out)

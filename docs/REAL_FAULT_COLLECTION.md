@@ -364,27 +364,71 @@ paper's discussion of fault-class separability with the existing
 
 ## 9. After-action — at the laptop
 
-When a recording is in hand:
+When a recording is in hand, use the **one-command pipeline** (P1-3):
 
-1. Run the harness:
+### 9a. Full pipeline (baseline drive — first time per vehicle)
 
-   ```
-   python -m scripts.eval_real_fault data/real_faults/skoda/skoda_vacuumleak_20260605_run1.csv
-   ```
+```bash
+python -m scripts.score_recording session1_baseline.csv \
+    --vehicle "Skoda Roomster 2007 1.6" \
+    --out-dir results/skoda/session1_baseline
+```
 
-   Output JSON lands at `results/real_fault_eval/skoda_vacuumleak_20260605_run1_v1.json`.
+This chains automatically:
+1. **adapt** — converts the raw Torque/Car-Scanner export to a clean 1 Hz CSV.
+2. **baseline** — fits a per-vehicle normalizer (`results/skoda/session1_baseline/normalizer.pkl`).
+3. **score** — runs the inference harness and prints a verdict.
 
-2. Open that JSON and read the `summary.label_counts` and the
-   per-window list. Manually classify each window as `pre`, `fault`, or
-   `post` using `mods_in_place_from_s` and `mods_removed_at_s` from the
-   sibling metadata JSON.
+### 9b. Subsequent recordings (use the baseline you already built)
 
-3. Compute vacuum-leak recall (see §10).
+```bash
+python -m scripts.score_recording session2_fault.csv \
+    --normalizer results/skoda/session1_baseline/normalizer.pkl \
+    --out-dir results/skoda/session2_fault
+```
 
-4. File the run's CSV + JSON + computed recall in `results/real_fault_eval/`
-   and add a row to `results/real_fault_eval/runs_index.md` (created on
-   first commit; one row per run, columns: filename, date, induction,
-   recall, notes).
+### 9c. Fault-interval recall (vacuum-leak session)
+
+Add `--fault-from` and `--fault-to` (seconds since start) to compute recall
+automatically:
+
+```bash
+python -m scripts.score_recording session3_leak.csv \
+    --normalizer results/skoda/session1_baseline/normalizer.pkl \
+    --out-dir results/skoda/session3_leak \
+    --fault-from 300 --fault-to 1200
+```
+
+The script prints the recall directly; the target is >= 0.60.
+
+### 9d. Step-by-step (if you prefer individual commands)
+
+```bash
+# 1. Inspect the raw export
+python -m scripts.inspect_recording raw_export.csv
+
+# 2. Adapt
+python -m scripts.adapt_torque_csv raw_export.csv \
+    --out data/real_faults/skoda/run1_adapted.csv
+
+# 3. Build baseline (first time)
+python -m scripts.capture_baseline_from_csv \
+    --csv data/real_faults/skoda/baseline_adapted.csv \
+    --vehicle "Skoda Roomster 2007 1.6"
+
+# 4. Score with override
+python -m scripts.eval_real_fault data/real_faults/skoda/run1_adapted.csv \
+    --normalizer models/skoda_roomster_2007_1.6_normalizer.pkl
+```
+
+### 9e. After scoring
+
+Open the result JSON and read `summary.label_counts` and the per-window list.
+Manually classify each window as `pre`, `fault`, or `post` using
+`mods_in_place_from_s` and `mods_removed_at_s` from the sibling metadata JSON.
+File the run's adapted CSV + result JSON + computed recall in
+`results/real_fault_eval/` and add a row to `results/real_fault_eval/runs_index.md`
+(one row per run: filename, date, induction, recall, notes).
 
 ---
 

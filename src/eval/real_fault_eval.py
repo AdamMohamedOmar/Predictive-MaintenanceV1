@@ -80,7 +80,8 @@ def evaluate_real_fault(
     -------
     dict
         ``csv_path`` (str), ``n_rows`` (int), ``n_windows`` (int),
-        ``windows`` (list of {elapsed_s, label, confidence, all_probs}),
+        ``windows`` (list of {elapsed_s, label, confidence, anomaly_score,
+        all_probs, severities, forecasts}),
         ``summary`` (label_counts, fault_window_count, fault_fraction).
 
     Note
@@ -134,6 +135,14 @@ def evaluate_real_fault(
                     "anomaly_score": float(getattr(state, "anomaly_score", 0.0)),
                     "all_probs": {
                         str(k): float(v) for k, v in state.all_class_probs.items()
+                    },
+                    # Current severity [0, 1] per fault type (physics formula)
+                    "severities": {
+                        str(k): float(v) for k, v in state.severities.items()
+                    },
+                    # 60-second-ahead forecasted severity [0, 1] per fault type
+                    "forecasts": {
+                        str(k): float(v) for k, v in state.forecasts.items()
                     },
                 }
             )

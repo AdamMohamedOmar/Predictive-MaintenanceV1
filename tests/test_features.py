@@ -115,6 +115,30 @@ def test_extract_features_all_finite():
     assert all(np.isfinite(v) for v in feats.values())
 
 
+def test_extract_features_tolerates_missing_pid():
+    """A window missing one PID must still return all 83 feature keys with no
+    KeyError.  The five stats for the absent PID will be NaN — that is correct
+    (downstream callers already NaN-fill with the healthy-baseline mean)."""
+    from src.config import USEFUL_PIDS
+
+    df = _make_session(60)
+    # Drop one PID entirely from the window
+    df = df.drop(columns=["CONTROL_MODULE_VOLTAGE"])
+    assert "CONTROL_MODULE_VOLTAGE" not in df.columns
+
+    feats = extract_features(df)  # must not raise KeyError
+
+    # All 83 feature keys must be present
+    assert len(feats) == 83
+    assert set(feats.keys()) == set(feature_names())
+
+    # The five stats for the dropped PID are NaN (not missing)
+    for stat in ("mean", "std", "min", "max", "delta"):
+        key = f"CONTROL_MODULE_VOLTAGE__{stat}"
+        assert key in feats
+        assert np.isnan(feats[key]), f"{key} should be NaN for a missing PID"
+
+
 def test_throttle_to_pedal_ratio_near_one_when_equal():
     df = _make_session(60)
     df["THROTTLE"] = 20.0

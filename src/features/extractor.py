@@ -70,9 +70,18 @@ def extract_features(window: pd.DataFrame, sample_hz: float = 1.0) -> dict[str, 
     Returns
     -------
     dict[str, float]
-        82 named features ready to be stacked into a training matrix.
+        83 named features ready to be stacked into a training matrix.
     """
     features: dict[str, float] = {}
+
+    # Tolerate a reduced-PID ECU: if a PID column is absent, inject a NaN
+    # column so the five stats for that PID become NaN.  Every downstream
+    # caller (BaselineNormalizer, InferenceEngine) already NaN-fills those
+    # slots with the healthy-baseline mean, so the model still runs.
+    if missing := [p for p in USEFUL_PIDS if p not in window.columns]:
+        window = window.copy()
+        for p in missing:
+            window[p] = float("nan")
 
     for pid in USEFUL_PIDS:
         col = window[pid].to_numpy(dtype=float)
