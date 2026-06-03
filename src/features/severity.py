@@ -1,9 +1,17 @@
 """PID-based fault severity in [0, 1] — usable at training AND Skoda inference.
 
 Each formula maps current sensor readings to a scalar that is 0 during
-healthy operation and 1 at full fault development. The formulas are
-physics-grounded (derived from the injection magnitudes in CLAUDE.md) and
-require four vehicle-specific baselines:
+healthy operation and 1 at full fault development.
+
+Scales are derived from EXTERNAL diagnostic thresholds (OBD-II fuel-trim
+limits, ECT plausibility), NOT from the injector's own coefficients (P0-2).
+The previous version set ``_AIR_SYSTEM_SCALE = (0.8 + 0.32) × 13`` — the
+algebraic inverse of the injector — so the supervised target was a
+deterministic function of the data-generator and the held-out F1 measured
+generator-recovery, not fault detection. Each scale below now cites a
+real-world diagnostic line so the same severity definition is meaningful on
+the Skoda's real faults.  The formulas require these vehicle-specific
+baselines:
   - SHORT_TERM_FUEL_TRIM_BANK_1__mean    (healthy STFT mean, %)
   - LONG_TERM_FUEL_TRIM_BANK_1__mean     (healthy LTFT mean, %)
   - THROTTLE_TO_PEDAL_RATIO              (healthy active-throttle median ratio)
@@ -22,22 +30,32 @@ import numpy as np
 
 _EPS = 1e-3  # safe divisor for ratio features
 
-# Denominator (full-scale delta) for each fault — matches injection magnitudes
+# ── Severity scales — sourced to external diagnostic thresholds (P0-2) ──────
 #
-# Air system: severity is based on the ECU's lean-correction fuel trim response,
-# NOT on MAP directly. MAP varies with throttle position (±15 kPa in normal driving)
-# making it too noisy for absolute-value severity. STFT + LTFT are the ECU's
-# measured response to unmetered air — they accumulate monotonically and are
-# independent of the driving regime.
-#   STFT response: 0.8 × 13 kPa = 10.4 % at full ramp
-#   LTFT response: 0.32 × 13 kPa = 4.16 % at full ramp
-#   Combined scale: 10.4 + 4.16 = 14.56 %
-_AIR_SYSTEM_SCALE = 14.56        # % combined fuel trim response at full ramp
-                                 # = (STFT coeff 0.8 + LTFT coeff 0.32) × 13 kPa magnitude
+# Air system (speed-density vacuum leak): on a MAP-based engine the leak's
+# fuel-trim signature is SMALL and idle-only (the ECU self-compensates from
+# the directly-measured MAP — see fault_injector._inject_air_system).  We
+# therefore scale the combined idle fuel-trim deviation by the OBD-II
+# "lean-trim concern" line: a sustained total fuel trim beyond ~10 % is the
+# widely-cited threshold at which a lean condition is diagnostically notable
+# (OBD-II fuel-trim diagnostic guides).  This is a DIAGNOSTIC threshold, not
+# the injector's coefficient.  Severity is idle-gated because off-idle the
+# leak is undetectable.
+_AIR_SYSTEM_SCALE = 10.0         # % combined idle fuel-trim deviation at "clearly lean" (OBD lean-trim watch line)
+_AIR_IDLE_LOAD_MAX = 40.0        # % calculated load — above this a speed-density leak washes out
 
-_FUEL_SYSTEM_SCALE = 18.0        # % LTFT bias at full ramp
-_COOLANT_NORMAL_TEMP = 90.0      # °C — petrol engine normal operating temp
-_COOLANT_SCALE = 48.0            # °C deficit at full fault (90 − 42 = 48)
+# Fuel system: LTFT is the ECU's learned lean correction.  ±10 % is the watch
+# line and ±20–25 % is where a real ECU sets a lean DTC (e.g. P0171).  We scale
+# to the 20 % "problem" line (Fleetrabbit / standard OBD-II fuel-trim guidance),
+# NOT the 18 % injection magnitude the old code used.
+_FUEL_SYSTEM_SCALE = 20.0        # % LTFT deviation at the diagnostic "problem" line (±20 %)
+
+_COOLANT_NORMAL_TEMP = 90.0      # °C — petrol engine normal operating temp (thermostat setpoint)
+# A coolant reading ≥ 40 °C below the thermostat setpoint, on an engine that
+# has run long enough to be warm, is an unambiguous sensor fault — the engine
+# physically cannot run that cold once warmed.  Scale to that 40 °C deficit
+# (a plausibility threshold), NOT the injector's (90 − 42 = 48) inverse.
+_COOLANT_SCALE = 40.0            # °C deficit at which a stuck-cold reading is unambiguously faulty
 # P1-1: distinguish a stuck-cold ECT from a legitimately warming engine by
 # warm-up DYNAMICS, not absolute temperature.  A real warm-up climbs ~1–2 °C/min;
 # a stuck sensor sits near 0 °C/min.  Gating coolant severity on "coolant <55 °C"
@@ -45,9 +63,12 @@ _COOLANT_SCALE = 48.0            # °C deficit at full fault (90 − 42 = 48)
 # trigger the gate that nullified it (coolant severity_target_mean was 0.0028).
 _COOLANT_STUCK_MAX = 75.0        # °C — a reading at/above this can't be a stuck-COLD sensor
 _WARMUP_RATE_HEALTHY = 0.5       # °C/min — at/above this the engine is actively warming (not stuck)
-_TPS_SCALE = 0.15                # range above deadband mapped to [0, 1] (0.35 delta − 0.20 deadband)
-_TPS_DEADBAND = 0.20             # ratio band treated as natural healthy variance — no fault
-                                 # empirically covers cross-session TPS ratio scatter (live12 had 0.19 Δ)
+# TPS scales are threshold-based, not injector-derived: the deadband is the
+# observed healthy cross-session ratio scatter, and full severity is reached at
+# a ~0.35 throttle-vs-pedal over-read (a 35 % divergence is an unambiguous TPS
+# correlation fault — cf. P2135 correlation-error diagnostics).
+_TPS_SCALE = 0.15                # maps (deadband → 0.35 over-read) onto [0, 1]
+_TPS_DEADBAND = 0.20             # healthy cross-session ratio scatter (live12 had 0.19 Δ) — no fault below this
 _TPS_MIN_THROTTLE_MEAN = 15.0    # below this throttle mean, ratio is unstable (idle/coast)
 
 # Gate: suppress fuel-trim and coolant severity when the ECU has not yet entered
@@ -85,8 +106,13 @@ def compute_severity(
         # on frozen trims is garbage.  Gate on FUEL_LOOP_ACTIVE before reading them.
         if _CLOSED_LOOP_REQUIRED and features.get("FUEL_LOOP_ACTIVE", 1.0) < 0.5:
             return 0.0
-        # Use ECU fuel trim response — MAP varies ±15 kPa with throttle (SNR < 1:1)
-        # STFT+LTFT are the ECU's measured lean correction; they accumulate reliably
+        # Speed-density physics (P0-1): a vacuum leak's fuel-trim signature is
+        # idle-only and washes out off-idle.  Gate on low calculated load so we
+        # only grade severity where the leak is actually observable.
+        if features.get("ENGINE_LOAD__mean", 100.0) > _AIR_IDLE_LOAD_MAX:
+            return 0.0
+        # Small idle lean-correction the ECU still applies (STFT leads, LTFT
+        # holds a marginal offset).  Scaled to the OBD lean-trim watch line.
         stft_mean = features["SHORT_TERM_FUEL_TRIM_BANK_1__mean"]
         ltft_mean = features["LONG_TERM_FUEL_TRIM_BANK_1__mean"]
         stft_base = baselines["SHORT_TERM_FUEL_TRIM_BANK_1__mean"]

@@ -1,0 +1,32 @@
+{
+  "same_config_macro_f1": 0.8922783954828386,
+  "withheld_config_macro_f1": 0.8595394983184459,
+  "gap": 0.03273889716439271,
+  "config_a": {
+    "name": "train",
+    "magnitudes": {
+      "air_system": 13.0,
+      "fuel_system": 18.0,
+      "coolant_temp_sensor": 42.0,
+      "throttle_position_sensor": 1.35
+    },
+    "onset_fraction": 0.4,
+    "ramp_fraction": 0.15,
+    "noise_std": 0.3
+  },
+  "config_b": {
+    "name": "withheld_eval",
+    "magnitudes": {
+      "air_system": 9.0,
+      "fuel_system": 24.0,
+      "coolant_temp_sensor": 38.0,
+      "throttle_position_sensor": 1.5
+    },
+    "onset_fraction": 0.55,
+    "ramp_fraction": 0.25,
+    "noise_std": 0.5
+  },
+  "n_test_same": 1199,
+  "n_test_withheld": 931,
+  "interpretation": "gap = same_config \u2212 withheld_config macro-F1. A LARGE gap means the headline synthetic F1 is substantially generator-overfit and would not transfer to faults the model did not author. This is an honest, expected outcome \u2014 Config B is not tuned to shrink it."
+}

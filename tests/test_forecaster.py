@@ -84,12 +84,20 @@ def test_severity_healthy_is_zero_for_all_faults():
         assert sev == pytest.approx(0.0, abs=0.05), f"{fault}: expected ~0, got {sev}"
 
 
-def test_severity_full_fault_is_one():
+def test_severity_developed_fault_is_high():
+    """A developed fault produces HIGH severity — but not necessarily exactly 1.0.
+
+    After P0-2 the scales are anchored to external diagnostic thresholds, not
+    the injector's coefficients, so a default-magnitude fault lands at its
+    real position relative to that threshold (e.g. an 18 % LTFT fuel fault is
+    0.9 of the 20 % diagnostic problem line, not an automatic 1.0). The old
+    "== 1.0" assertion was the algebraic-inverse coupling this fix removes.
+    """
     bases = _healthy_baselines()
     for fault in FAULT_TYPES:
         feats = _fault_features(fault)
         sev = compute_severity(feats, fault, bases)
-        assert sev == pytest.approx(1.0, abs=0.05), f"{fault}: expected ~1.0, got {sev}"
+        assert sev > 0.85, f"{fault}: developed fault should be high severity, got {sev}"
 
 
 def test_severity_clamped_above_one():

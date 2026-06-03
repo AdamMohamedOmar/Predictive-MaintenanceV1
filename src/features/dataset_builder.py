@@ -75,6 +75,10 @@ def build_dataset(
     *,
     random_seed: int = RANDOM_SEED,
     noise_std: float = _NOISE_STD,
+    onset_fraction: float = _ONSET_FRAC,
+    ramp_fraction: float = _RAMP_FRAC,
+    magnitudes: dict[str, float] | None = None,
+    output_name: str = "dataset_v1",
 ) -> pd.DataFrame:
     """Build the labelled feature dataset from carOBD files and save it.
 
@@ -88,6 +92,16 @@ def build_dataset(
         Master seed; per-session seeds are derived from this.
     noise_std : float
         Gaussian noise level passed to the fault injector.
+    onset_fraction, ramp_fraction : float
+        Injection timing fractions.  Defaults match the deployed config.
+        Overridden by the withheld-coefficient evaluation (P0-2) to generate
+        faults from a DIFFERENT generator configuration than the training set.
+    magnitudes : dict or None
+        Per-fault magnitude override.  None → injector defaults.
+    output_name : str
+        Stem for the output parquet / metadata files (default ``dataset_v1``).
+        The withheld-eval config writes a separate ``dataset_configB`` so it
+        never overwrites the training dataset.
 
     Returns
     -------
@@ -131,8 +145,9 @@ def build_dataset(
             df_faulty = inject_session(
                 df_clean,
                 fault,
-                onset_fraction=_ONSET_FRAC,
-                ramp_fraction=_RAMP_FRAC,
+                onset_fraction=onset_fraction,
+                ramp_fraction=ramp_fraction,
+                magnitude=(magnitudes or {}).get(fault),
                 noise_std=noise_std,
                 random_seed=session_seed,
             )
@@ -167,11 +182,14 @@ def build_dataset(
     meta_cols = ["label", "label_id", "session_id", "fault_type"]
     dataset = dataset[feat_cols + meta_cols]
 
-    out_path = output_dir / "dataset_v1.parquet"
+    out_path = output_dir / f"{output_name}.parquet"
     dataset.to_parquet(out_path, index=False)
     log.info("Saved %d rows × %d features to %s", len(dataset), len(feat_cols), out_path)
 
-    _save_metadata(output_dir, dataset, usable_files, random_seed, noise_std)
+    _save_metadata(
+        output_dir, dataset, usable_files, random_seed, noise_std,
+        onset_fraction, ramp_fraction, magnitudes or _DEFAULT_MAGNITUDE, output_name,
+    )
 
     return dataset
 
@@ -182,6 +200,10 @@ def _save_metadata(
     usable_files: list[Path],
     random_seed: int,
     noise_std: float,
+    onset_fraction: float,
+    ramp_fraction: float,
+    magnitudes: dict[str, float],
+    output_name: str,
 ) -> None:
     class_counts = dataset.groupby("label")["label"].count().to_dict()
     meta = {
@@ -193,14 +215,14 @@ def _save_metadata(
         "class_counts": class_counts,
         "injection": {
             "mode": "ramp",
-            "onset_fraction": _ONSET_FRAC,
-            "ramp_fraction": _RAMP_FRAC,
+            "onset_fraction": onset_fraction,
+            "ramp_fraction": ramp_fraction,
             "noise_std": noise_std,
-            "magnitudes": _DEFAULT_MAGNITUDE,
+            "magnitudes": magnitudes,
         },
         "random_seed": random_seed,
     }
-    meta_path = output_dir / "dataset_v1_meta.json"
+    meta_path = output_dir / f"{output_name}_meta.json"
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     log.info("Metadata saved to %s", meta_path)
