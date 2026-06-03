@@ -38,6 +38,13 @@ _AIR_SYSTEM_SCALE = 14.56        # % combined fuel trim response at full ramp
 _FUEL_SYSTEM_SCALE = 18.0        # % LTFT bias at full ramp
 _COOLANT_NORMAL_TEMP = 90.0      # °C — petrol engine normal operating temp
 _COOLANT_SCALE = 48.0            # °C deficit at full fault (90 − 42 = 48)
+# P1-1: distinguish a stuck-cold ECT from a legitimately warming engine by
+# warm-up DYNAMICS, not absolute temperature.  A real warm-up climbs ~1–2 °C/min;
+# a stuck sensor sits near 0 °C/min.  Gating coolant severity on "coolant <55 °C"
+# (the old behaviour) made the fault's own symptom — a permanently-cold reading —
+# trigger the gate that nullified it (coolant severity_target_mean was 0.0028).
+_COOLANT_STUCK_MAX = 75.0        # °C — a reading at/above this can't be a stuck-COLD sensor
+_WARMUP_RATE_HEALTHY = 0.5       # °C/min — at/above this the engine is actively warming (not stuck)
 _TPS_SCALE = 0.15                # range above deadband mapped to [0, 1] (0.35 delta − 0.20 deadband)
 _TPS_DEADBAND = 0.20             # ratio band treated as natural healthy variance — no fault
                                  # empirically covers cross-session TPS ratio scatter (live12 had 0.19 Δ)
@@ -96,19 +103,24 @@ def compute_severity(
         return float(np.clip((ltft_mean - ltft_base) / _FUEL_SYSTEM_SCALE, 0.0, 1.0))
 
     if fault_type == "coolant_temp_sensor":
-        # A cold engine is NOT a coolant sensor fault. Suppress severity until
-        # the ECU is in closed loop and the engine is fully warm (≥ 75 °C).
-        # REGIME__COLD_START covers < 55 °C; REGIME__WARMUP covers 55–75 °C.
-        # A stuck sensor in this temperature range is indistinguishable from
-        # a legitimately warming engine — verification shows live5 has Δsev=0.66
-        # at 300 s when coolant is ~58 °C but rising normally.
-        if features.get("REGIME__COLD_START", 0.0) >= 0.5:
-            return 0.0
-        if features.get("REGIME__WARMUP", 0.0) >= 0.5:
-            return 0.0
-        if _CLOSED_LOOP_REQUIRED and features.get("FUEL_LOOP_ACTIVE", 1.0) < 0.5:
-            return 0.0
+        # P1-1: gate on warm-up DYNAMICS, not absolute temperature.  The old
+        # regime/fuel-loop gates all keyed on "coolant is cold" — which a
+        # stuck-cold sensor reports forever, so the fault gated away its own
+        # severity (committed coolant target_mean was 0.0028 ≈ constant zero).
         cool_mean = features["COOLANT_TEMPERATURE__mean"]
+        # A warm reading cannot be a stuck-COLD sensor — no fault.
+        if cool_mean >= _COOLANT_STUCK_MAX:
+            return 0.0
+        # Coolant is cold.  If it is CLIMBING at a healthy rate the engine is
+        # legitimately warming up — not a fault.  Only a cold AND flat reading
+        # (the sensor stuck while the engine should be heating) is the fault.
+        # COOLANT_WARMUP_RATE is °C/min over the window (see extractor.py).
+        # Note: a perfect run-time signal (ENGINE_RUN_TIME) would further
+        # disambiguate the rare "genuinely cold engine, barely warming" window;
+        # warm-up rate is the discriminator the extractor exposes today.
+        warmup_rate = features.get("COOLANT_WARMUP_RATE", 0.0)
+        if warmup_rate >= _WARMUP_RATE_HEALTHY:
+            return 0.0
         return float(np.clip((_COOLANT_NORMAL_TEMP - cool_mean) / _COOLANT_SCALE, 0.0, 1.0))
 
     if fault_type == "throttle_position_sensor":

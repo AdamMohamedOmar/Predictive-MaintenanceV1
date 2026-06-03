@@ -116,12 +116,12 @@ The classifier operates over **six classes**: four injectable faults, a healthy 
 |---|---|---|---|
 | Healthy | Regime | Nominal operation | All PIDs within vehicle-specific baseline |
 | Cold start | Regime | Engine warming up from a cold ambient start | Coolant temperature rising from < 55 °C, enriched fuel trims, retarded timing (all natural for the regime) |
-| Air system fault | Fault | MAF drift or intake vacuum leak | Intake manifold pressure, long-term fuel trim |
-| Fuel system fault | Fault | Injector clogging or fuel pressure drop | Long-term fuel trim, short-term fuel trim (both biased) |
-| Coolant temperature sensor fault | Fault | Stuck or drifting ECT sensor | Coolant temperature, timing advance |
+| Air system fault | Fault | Intake vacuum leak on a **speed-density (MAP) engine** — no MAF | Raised idle RPM + slightly elevated idle MAP + higher calculated load; small idle-only fuel trim |
+| Fuel system fault | Fault | Injector clogging or fuel pressure drop | Sustained positive LTFT; STFT leads during onset then hands off toward 0 |
+| Coolant temperature sensor fault | Fault | Stuck or drifting ECT sensor | Coolant temperature stuck low, retarded timing, and negative (rich) fuel trims |
 | Throttle position sensor fault | Fault | TPS drift | Throttle position vs. accelerator pedal position mismatch |
 
-The injection engine produces, for each fault class, a modification that is both detectable in the listed signature PIDs and physically consistent with secondary effects. The cold_start regime is **not** injected — it occurs naturally in any session that begins with a cold engine, and the classifier learns it from labelled windows in the regular dataset.
+The injection engine produces, for each fault class, a modification that is both detectable in the listed signature PIDs and physically consistent with secondary effects. **The air-system mechanism reflects speed-density physics** (carOBD reports MAP + load + barometric pressure but no MAF): a vacuum leak behaves like a partly-open throttle, raising idle speed and MAP, because the MAP sensor measures the post-leak pressure directly and the ECU self-compensates fuel — so the fuel-trim response is small and idle-localised, not the large swing a MAF-system leak would cause. The cold_start regime is **not** injected — it occurs naturally in any session that begins with a cold engine, and the classifier learns it from labelled windows in the regular dataset.
 
 **Oxygen sensor fault — dropped from the taxonomy (v1.2).** Earlier drafts of this charter (v1.0–v1.1) included an oxygen sensor fault as the fifth class. Investigation during Week 1 showed that `FUEL_AIR_COMMANDED_EQUIV_RATIO` is always-zero on the Etios ECU (see `docs/DATA_NOTES.md`), making the primary O₂-sensor signature unobservable in the carOBD recordings. Synthetic O₂ injection cannot be verified against a real signal in this dataset, so the class was dropped and the deployment slot reassigned to `cold_start`. The reframe is part of the v1.2 amendment that this charter version ships.
 

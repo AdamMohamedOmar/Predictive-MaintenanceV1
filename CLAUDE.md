@@ -76,9 +76,9 @@ All dependencies are exact-pinned. Do not change versions without explicit discu
 | Class ID | Label | Type | Primary PIDs | Mechanical / Regime Description |
 |---|---|---|---|---|
 | 0 | `healthy` | Regime | All 14 PIDs nominal | No fault |
-| 1 | `air_system` | Fault | `INTAKE_MANIFOLD_PRESSURE`, `STFT`, `LTFT` | Vacuum leak or MAF drift; extra unmetered air enters after MAF |
-| 2 | `fuel_system` | Fault | `LTFT` (sustained high), `STFT` | Injector clog or low rail pressure; ECU compensates with chronic positive trim |
-| 3 | `coolant_temp_sensor` | Fault | `COOLANT_TEMPERATURE`, `TIMING_ADVANCE`, `INTAKE_AIR_TEMPERATURE` | Stuck/biased ECT sensor; ECU believes engine is perpetually cold |
+| 1 | `air_system` | Fault | `ENGINE_RPM` (idle-up), `INTAKE_MANIFOLD_PRESSURE`, `ENGINE_LOAD` | Vacuum leak on a **speed-density (MAP) engine** — no MAF. Acts like a cracked-open throttle blade: raised idle RPM + slightly elevated idle MAP + higher calculated load. The MAP sensor sees the leak directly so the ECU self-compensates fuel; any trim response is **small and idle-only**, washing out off-idle. |
+| 2 | `fuel_system` | Fault | `LTFT` (sustained high), `STFT` (leads then hands off) | Injector clog or low rail pressure; ECU compensates with chronic positive **LTFT** while **STFT decays back to ~0** at steady state (adaptive-trim handoff). |
+| 3 | `coolant_temp_sensor` | Fault | `COOLANT_TEMPERATURE`, `TIMING_ADVANCE`, `STFT`/`LTFT` (rich) | Stuck/biased ECT sensor; ECU believes engine is perpetually cold → retards timing **and** holds cold-enrichment → **negative (rich)** fuel trims. |
 | 4 | `throttle_position_sensor` | Fault | `THROTTLE` vs `ACCELERATOR_PEDAL_POSITION_D` ratio | TPS potentiometer wear; reported angle diverges from actual pedal position |
 | 5 | `cold_start` | Regime | `COOLANT_TEMPERATURE` (< 55 °C, rising), enriched fuel trims, retarded timing | Engine warming up from cold ambient; not a fault — the classifier learns this regime separately to avoid mis-attributing warm-up enrichment to a fuel-system fault. Not injected. |
 
@@ -117,7 +117,7 @@ RANDOM_SEED      = 42
 
 1. **Two injection modes for every fault:** `step` (sudden sensor failure) and `ramp` (gradual wear degradation).
 2. **Injection window:** 40–60 % of the session's window sequence, after a clean baseline period.
-3. **Correlated effects:** If a fault alters one PID, update all physically-coupled PIDs. Example: MAP offset for air_system must trigger a correlated STFT response.
+3. **Correlated effects:** If a fault alters one PID, update all physically-coupled PIDs. Example: a speed-density air_system leak raises idle RPM, idle MAP, and calculated load together (and only a small, idle-only trim — the MAP sensor lets the ECU self-compensate fuel).
 4. **Document every delta:** Each injector must store the parameters used (onset index, magnitude, mode) for reproducibility.
 5. **Clamp before write:** Never write a value outside physical bounds. Clamp silently and assert the clamp was applied.
 

@@ -53,6 +53,7 @@ def _fault_features(fault_type: str) -> dict[str, float]:
         f["LONG_TERM_FUEL_TRIM_BANK_1__mean"] = 18.5  # +18 % over baseline of 0.5
     elif fault_type == "coolant_temp_sensor":
         f["COOLANT_TEMPERATURE__mean"] = 42.0
+        f["COOLANT_WARMUP_RATE"] = 0.0  # stuck sensor: cold AND flat (P1-1 discriminator)
     elif fault_type == "throttle_position_sensor":
         # ratio=1.35: delta=0.35, post-deadband=(0.35-0.20)/0.15=1.0 severity
         # THROTTLE__mean=25.0 ensures the low-throttle gate (15%) does not suppress.
@@ -116,31 +117,39 @@ def test_severity_monotone_with_fuel_trim_increase():
         prev = sev
 
 
-def test_coolant_severity_zero_during_cold_start():
-    """A cold engine reading 40°C must NOT be flagged as a coolant fault."""
+def test_coolant_severity_zero_during_healthy_warmup():
+    """A cold engine that is actively WARMING (≥0.5 °C/min) is healthy, not a fault.
+
+    P1-1: the discriminator is warm-up DYNAMICS, not absolute temperature. A
+    40 °C engine climbing 1.5 °C/min is a normal cold-start, scored 0.
+    """
     feats = _healthy_features()
     feats["COOLANT_TEMPERATURE__mean"] = 40.0
-    feats["REGIME__COLD_START"] = 1.0  # explicitly cold-start regime
+    feats["COOLANT_WARMUP_RATE"] = 1.5  # climbing normally
     sev = compute_severity(feats, "coolant_temp_sensor", _healthy_baselines())
     assert sev == 0.0
 
 
-def test_coolant_severity_zero_when_loop_inactive():
-    """Open-loop ECU → STFT/coolant readings are not closed-loop signals."""
+def test_coolant_severity_fires_even_in_open_loop():
+    """P1-1 regression: a stuck-cold sensor is open-loop, but must still register.
+
+    The old FUEL_LOOP_ACTIVE gate wrongly suppressed coolant severity whenever
+    the ECU was open-loop — which a stuck-cold engine always is. That gate was
+    removed; a cold AND flat reading now scores regardless of loop state.
+    """
     feats = _healthy_features()
-    feats["COOLANT_TEMPERATURE__mean"] = 40.0
-    feats["REGIME__COLD_START"] = 0.0
-    feats["FUEL_LOOP_ACTIVE"] = 0.0
+    feats["COOLANT_TEMPERATURE__mean"] = 42.0
+    feats["COOLANT_WARMUP_RATE"] = 0.0  # stuck (flat)
+    feats["FUEL_LOOP_ACTIVE"] = 0.0      # open loop — must NOT suppress anymore
     sev = compute_severity(feats, "coolant_temp_sensor", _healthy_baselines())
-    assert sev == 0.0
+    assert sev > 0.5
 
 
 def test_coolant_severity_zero_during_warmup():
-    """Engine in warmup (55-75°C) is not a coolant fault — rising temp is healthy."""
+    """Engine warming through 60 °C at a healthy rate is not a coolant fault."""
     feats = _healthy_features()
     feats["COOLANT_TEMPERATURE__mean"] = 60.0  # legitimately warming up
-    feats["REGIME__WARMUP"] = 1.0
-    feats["REGIME__COLD_START"] = 0.0
+    feats["COOLANT_WARMUP_RATE"] = 1.0
     sev = compute_severity(feats, "coolant_temp_sensor", _healthy_baselines())
     assert sev == 0.0
 

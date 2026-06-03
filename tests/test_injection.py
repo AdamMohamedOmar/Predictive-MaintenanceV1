@@ -320,6 +320,58 @@ def test_air_system_map_delta_larger_at_low_load():
     )
 
 
+# ─── P0-3: STFT→LTFT steady-state handoff ────────────────────────────────────
+
+def test_fuel_system_stft_hands_off_to_ltft():
+    """A DEVELOPED fuel fault must show high LTFT and near-zero MEAN STFT.
+
+    Real adaptive fuel control hands the persistent correction from STFT
+    (fast, leads) to LTFT (learned, holds). Modelling both elevated together
+    trains FUEL_TRIM_DIVERGENCE on a relationship the real ECU never produces.
+    """
+    df = _make_session(n=400)
+    df["LONG_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    df["SHORT_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    # onset early, short ramp, so most of the session is fully developed
+    out = inject_fault(
+        df, _params("fuel_system", onset_idx=40, ramp_len=40, noise_std=0.0)
+    )
+    # "developed" = last 30 % of rows (well past ramp end + handoff tau)
+    dev = slice(int(0.7 * len(df)), None)
+    ltft_dev = out["LONG_TERM_FUEL_TRIM_BANK_1"].iloc[dev].mean()
+    stft_dev = out["SHORT_TERM_FUEL_TRIM_BANK_1"].iloc[dev].mean()
+    assert ltft_dev > 10.0, f"Developed LTFT should hold the offset, got {ltft_dev:.2f}%."
+    assert abs(stft_dev) < ltft_dev / 2.0, (
+        f"Developed STFT should have handed off toward 0 — "
+        f"|STFT|={abs(stft_dev):.2f}% is not < LTFT/2={ltft_dev / 2:.2f}%."
+    )
+
+
+# ─── P1-2: coolant fault has a rich-bias fuel-trim signature ──────────────────
+
+def test_coolant_fault_adds_rich_bias():
+    """A developed stuck-cold ECT fault must drive fuel trims NEGATIVE (rich)
+    while still retarding timing (existing behaviour preserved)."""
+    df = _make_session(n=400)
+    df["LONG_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    df["TIMING_ADVANCE"] = 15.0
+    df["COOLANT_TEMPERATURE"] = 90.0
+    out = inject_fault(
+        df, _params("coolant_temp_sensor", magnitude=42.0, onset_idx=40,
+                    ramp_len=40, noise_std=0.0)
+    )
+    ltft_pre = out["LONG_TERM_FUEL_TRIM_BANK_1"].iloc[:40].mean()
+    ltft_post = out["LONG_TERM_FUEL_TRIM_BANK_1"].iloc[int(0.7 * len(df)):].mean()
+    assert ltft_post < ltft_pre, (
+        f"Stuck-cold ECT should bias LTFT rich (negative) — "
+        f"pre={ltft_pre:.2f}%, post={ltft_post:.2f}%."
+    )
+    # Timing still retarded.
+    timing_pre = out["TIMING_ADVANCE"].iloc[:40].mean()
+    timing_post = out["TIMING_ADVANCE"].iloc[int(0.7 * len(df)):].mean()
+    assert timing_post < timing_pre, "Timing retard (existing behaviour) must be preserved."
+
+
 # ─── Integration with real data ──────────────────────────────────────────────
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="carOBD data not present")

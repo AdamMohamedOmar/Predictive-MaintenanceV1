@@ -47,11 +47,94 @@ _BARO_FALLBACK = 101.0    # kPa — used when ABSOLUTE_BAROMETRIC_PRESSURE absen
 
 # Sensible defaults for each fault at "moderate" severity
 _DEFAULT_MAGNITUDE: dict[str, float] = {
-    "air_system": 13.0,               # kPa MAP offset at full ramp
+    "air_system": 13.0,               # kPa-equivalent leak size (drives idle RPM + MAP, see _inject_air_system)
     "fuel_system": 18.0,              # % LTFT bias at full ramp
     "coolant_temp_sensor": 42.0,      # °C stuck-sensor target temperature
     "throttle_position_sensor": 1.35, # multiplier on THROTTLE at full ramp — widened by _TPS_DEADBAND so full-ramp severity stays = 1.0
 }
+
+# ── Speed-density vacuum-leak constants (P0-1) ───────────────────────────────
+# carOBD reports MAP + ENGINE_LOAD + BARO and NO MAF PID → this is a
+# speed-density (MAP-based) engine.  On such engines the MAP sensor measures
+# post-leak manifold pressure directly, so the ECU re-computes airflow and
+# largely self-compensates fuel.  The robust, reliable signatures of a vacuum
+# leak are therefore mechanical, not fuel-trim:
+#   1. raised idle RPM (the leak acts like a partly-open throttle blade),
+#   2. slightly elevated MAP at idle / low load (less vacuum),
+#   3. only a small, idle-only fuel-trim bump that washes out off-idle.
+# Sources: Vehicle Service Pros "Fuel Trim for Diagnostics"; ScannerDanner
+# ("MAP-only engines tend to be very tolerant of vacuum leaks … often the
+# only symptom is a slightly raised idle speed"); ASE Fuel-Injection Diagnosis.
+_AIR_RPM_PER_KPA = 15.0      # idle RPM rise per unit leak magnitude at full ramp (13 → ~195 rpm)
+_AIR_IDLE_RPM_CEILING = 1500.0  # a vacuum-leak idle-up rarely exceeds this; clamp for sanity
+_AIR_IDLE_RPM_MAX = 1200.0   # rows above this RPM are not "idle" for the bump
+_AIR_IDLE_SPEED_MAX = 2.0    # km/h — rows above this are not "idle"
+_AIR_MAP_COEFF = 0.5         # MAP delta per leak magnitude (reduced from 1.0; idle-gated)
+_AIR_STFT_COEFF = 0.15       # small idle-only STFT bump (cut hard from 0.8)
+_AIR_LTFT_COEFF = 0.05       # LTFT marginal on speed-density (greatly shrunk from 0.32)
+_AIR_LOAD_COEFF = 0.3        # calculated-load rise per leak magnitude (idle-gated)
+
+# ── Stuck-cold ECT rich-bias constants (P1-2) ────────────────────────────────
+# A stuck-cold ECT makes the ECU believe the engine never warmed up, so it
+# holds cold-enrichment fuelling.  The rich mixture shows, once closed-loop is
+# reached, as NEGATIVE fuel trims — the single most OBD-detectable consequence,
+# and one the old injector (timing-retard only) never produced.  Without it a
+# real stuck-ECT on the Skoda would present with a signature the model never saw.
+_COOLANT_RICH_LTFT = -8.0       # % LTFT at full fault (chronic rich bias)
+_COOLANT_RICH_STFT_PEAK = -4.0  # % STFT peak during the transient before handoff
+
+# ── STFT→LTFT steady-state handoff (P0-3) ────────────────────────────────────
+# Real adaptive fuel control: STFT is the fast corrector that LEADS during a
+# developing fault, then bleeds back toward ~0 (still oscillating) as LTFT
+# integrates and HOLDS the persistent offset.  A developed fault therefore
+# shows high LTFT and near-zero MEAN STFT.  Modelling both elevated together
+# (the old behaviour) trains FUEL_TRIM_DIVERGENCE on a relationship the real
+# ECU never reproduces.  Source: Foxwell "Understanding LTFT Bank 1".
+_HANDOFF_TAU = 60.0          # rows (≈ seconds at 1 Hz) for STFT to decay post-ramp
+
+
+def _steady_state_trim(
+    ramp: np.ndarray,
+    stft_peak: np.ndarray,
+    ltft_full: np.ndarray,
+    handoff_tau: float = _HANDOFF_TAU,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Split a trim correction into a leading STFT and a lagging/holding LTFT.
+
+    During the ramp STFT tracks the ramp (leads) while LTFT lags at half-weight.
+    Once the fault is "developed" (ramp has reached 1.0) STFT decays toward 0
+    over ``handoff_tau`` rows while LTFT integrates up to the full offset and
+    holds it.
+
+    Parameters
+    ----------
+    ramp : np.ndarray
+        The 0→1 ramp from ``_build_ramp`` (0 pre-onset, 1 post-ramp).
+    stft_peak, ltft_full : np.ndarray
+        Per-row peak STFT delta and full LTFT offset (may already be
+        idle-weighted by the caller).
+    handoff_tau : float
+        Rows over which STFT bleeds to ~0 after the ramp completes.
+
+    Returns
+    -------
+    (stft_mean_delta, ltft_delta) : tuple[np.ndarray, np.ndarray]
+        Mean (noise-free) trim deltas to add to the baseline trims.  The
+        caller adds oscillation noise to STFT separately so it keeps
+        wandering around its decaying mean.
+    """
+    n = len(ramp)
+    # First row where the fault is fully developed (ramp == 1.0).
+    if np.any(ramp >= 1.0):
+        dev_start = int(np.argmax(ramp >= 1.0))
+    else:
+        dev_start = n  # ramp never completes → no developed region
+    t_since_dev = np.maximum(0.0, np.arange(n) - dev_start)
+    p = np.clip(t_since_dev / handoff_tau, 0.0, 1.0)  # 0 at ramp end → 1 after tau
+
+    stft_mean = stft_peak * ramp * (1.0 - p)          # leads, then bleeds to 0
+    ltft = ltft_full * (0.5 * ramp + 0.5 * p)          # lags, then climbs to full
+    return stft_mean, ltft
 
 
 @dataclass
@@ -186,14 +269,25 @@ def _inject_air_system(
     magnitude_kpa: float,
     noise: Callable[[float], np.ndarray],
 ) -> None:
-    """Vacuum leak / MAF drift.
+    """Speed-density vacuum leak.
 
-    Extra air bypasses the MAF sensor → MAP reads high for a given throttle
-    angle → ECU senses lean exhaust → STFT climbs positive → LTFT slowly
-    integrates the STFT offset.
+    carOBD is a MAP-based (speed-density) engine — there is no MAF PID.  On
+    such engines a vacuum leak does NOT produce a large fuel-trim swing: the
+    MAP sensor measures the post-leak manifold pressure directly, so the ECU
+    re-computes airflow from the higher MAP and largely self-compensates fuel.
+    The robust, observable signature is mechanical:
 
-    MAP clamp: naturally-aspirated engine cannot exceed barometric pressure.
-    STFT/LTFT clamp: OBD-II standard ±25 %.
+      PRIMARY   ENGINE_RPM rises at idle (leak == partly-open throttle blade)
+      PRIMARY   INTAKE_MANIFOLD_PRESSURE rises slightly at idle (less vacuum)
+      secondary ENGINE_LOAD rises slightly (higher calculated load)
+      small     a tiny, idle-only positive STFT bump that washes out off-idle
+                and hands off to a marginal LTFT (P0-3 handoff)
+
+    Off-idle (load high, RPM/speed up) every effect decays toward zero — a
+    vacuum leak is a fraction of total airflow at idle but negligible at WOT.
+
+    Clamps: MAP ≤ barometric (naturally-aspirated); idle RPM ≤ ceiling;
+    STFT/LTFT within OBD-II ±25 %.
     """
     baro = (
         df["ABSOLUTE_BAROMETRIC_PRESSURE"].to_numpy(dtype=float)
@@ -201,44 +295,55 @@ def _inject_air_system(
         else np.full(len(df), _BARO_FALLBACK)
     )
 
-    # Idle-weight: vacuum leaks are a larger fraction of total airflow at
-    # idle than at wide-open-throttle.  Scale the injection toward 100 % at
-    # low load and clamp to 30 % minimum so the fault is still visible at WOT.
+    # Sharper idle-weight than the old 1−load/60: the effect genuinely vanishes
+    # off-idle (clip to 0, not 0.3) because on a speed-density engine the leak's
+    # contribution to airflow is negligible once the throttle is open.
     load = df["ENGINE_LOAD"].to_numpy(dtype=float)
-    idle_weight = np.clip(1.0 - load / 60.0, 0.3, 1.0)
+    idle_weight = np.clip(1.0 - load / 40.0, 0.0, 1.0)
 
-    map_delta = ramp * magnitude_kpa * idle_weight + noise(0.3)
+    # ── PRIMARY 1: idle RPM bump ────────────────────────────────────────────
+    # Only at genuine idle (low RPM AND ~stationary); the leak pulls the idle
+    # speed up like a cracked-open throttle.  Clamp to a sane idle ceiling.
+    rpm = df["ENGINE_RPM"].to_numpy(dtype=float)
+    speed = (
+        df["VEHICLE_SPEED"].to_numpy(dtype=float)
+        if "VEHICLE_SPEED" in df.columns
+        else np.zeros(len(df))
+    )
+    idle_mask = (rpm < _AIR_IDLE_RPM_MAX) & (speed < _AIR_IDLE_SPEED_MAX)
+    rpm_bump = ramp * idle_weight * magnitude_kpa * _AIR_RPM_PER_KPA + noise(2.0)
+    rpm_new = np.where(idle_mask, np.minimum(rpm + rpm_bump, _AIR_IDLE_RPM_CEILING), rpm)
+    df["ENGINE_RPM"] = np.clip(rpm_new, a_min=0.0, a_max=None)
+
+    # ── PRIMARY 2: slightly elevated MAP at idle ────────────────────────────
+    map_delta = ramp * magnitude_kpa * idle_weight * _AIR_MAP_COEFF + noise(0.3) * idle_weight
     df["INTAKE_MANIFOLD_PRESSURE"] = np.clip(
         df["INTAKE_MANIFOLD_PRESSURE"].to_numpy(dtype=float) + map_delta,
         a_min=0.0,
         a_max=baro,
     )
 
-    # STFT lean-correction: approximately 0.8× the effective air-excess signal.
-    # Also idle-weighted — the trim response is proportional to the actual leak.
-    stft_delta = ramp * magnitude_kpa * idle_weight * 0.8 + noise(0.5)
+    # ── secondary: calculated load rises a little at idle ───────────────────
+    load_delta = ramp * magnitude_kpa * idle_weight * _AIR_LOAD_COEFF + noise(0.2) * idle_weight
+    df["ENGINE_LOAD"] = np.clip(load + load_delta, 0.0, 100.0)
+
+    # ── small idle-only fuel-trim bump with STFT→LTFT handoff (P0-3) ─────────
+    # Tiny coefficients, idle-weighted so the bump washes out off-idle.  The
+    # handoff makes the developed-state STFT decay toward 0 while a marginal
+    # LTFT holds — matching real speed-density behaviour where any trim is
+    # small and transient.
+    stft_peak = magnitude_kpa * idle_weight * _AIR_STFT_COEFF
+    ltft_full = magnitude_kpa * idle_weight * _AIR_LTFT_COEFF
+    stft_mean, ltft_delta = _steady_state_trim(ramp, stft_peak, ltft_full)
     df["SHORT_TERM_FUEL_TRIM_BANK_1"] = np.clip(
-        df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_delta,
+        df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_mean + noise(0.3),
         -_STFT_MAX,
         _STFT_MAX,
     )
-
-    # LTFT: slow integrator — reaches ~40 % of STFT magnitude at full ramp.
-    # Not idle-weighted (LTFT integrates the STFT history, smoothing the weight).
-    ltft_delta = ramp * magnitude_kpa * 0.32 + noise(0.1)
     df["LONG_TERM_FUEL_TRIM_BANK_1"] = np.clip(
-        df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta,
+        df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta + noise(0.05),
         -_LTFT_MAX,
         _LTFT_MAX,
-    )
-
-    # ENGINE_LOAD: extra unmetered air means the engine is doing more work than
-    # the ECU believes — load reading rises slightly (~30 % of MAP delta in %)
-    load_delta = ramp * magnitude_kpa * idle_weight * 0.3 + noise(0.2)
-    df["ENGINE_LOAD"] = np.clip(
-        df["ENGINE_LOAD"].to_numpy(dtype=float) + load_delta,
-        0.0,
-        100.0,
     )
 
 
@@ -254,20 +359,26 @@ def _inject_fuel_system(
     a rising LTFT. MAP is intentionally left unchanged — that unchanged MAP is
     the key feature distinguishing this fault from an air-system fault.
 
-    STFT oscillates with positive mean (~30 % of LTFT delta) as the ECU hunts
-    around the trim offset.
+    STFT→LTFT handoff (P0-3): during the ramp STFT leads (rises first) while
+    LTFT lags; once the fault is developed, STFT bleeds back toward 0 (still
+    oscillating on noise) and LTFT holds the chronic offset.  A developed
+    fuel-system fault therefore shows high LTFT and near-zero MEAN STFT — the
+    relationship a real adaptive ECU produces.
     """
-    ltft_delta = ramp * magnitude_pct + noise(0.2)
+    # STFT leads at ~half the offset during the transient, then decays to 0;
+    # LTFT lags then climbs to the full offset and holds it.
+    stft_peak = np.full(len(ramp), magnitude_pct * 0.5)
+    ltft_full = np.full(len(ramp), magnitude_pct)
+    stft_mean, ltft_delta = _steady_state_trim(ramp, stft_peak, ltft_full)
+
     df["LONG_TERM_FUEL_TRIM_BANK_1"] = np.clip(
-        df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta,
+        df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta + noise(0.2),
         -_LTFT_MAX,
         _LTFT_MAX,
     )
-
-    # STFT: positive-biased oscillation around the LTFT offset
-    stft_bias = ramp * magnitude_pct * 0.3
+    # STFT keeps its oscillation noise around the decaying mean.
     df["SHORT_TERM_FUEL_TRIM_BANK_1"] = np.clip(
-        df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_bias + noise(1.0),
+        df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_mean + noise(1.0),
         -_STFT_MAX,
         _STFT_MAX,
     )
@@ -308,6 +419,12 @@ def _inject_coolant_temp(
 
     The 1 °C/sec max-change constraint is enforced sample-by-sample after
     computing the target trajectory, preserving thermal inertia realism.
+
+    Rich-bias signature (P1-2): the ECU holds cold-enrichment fuelling because
+    it believes the engine is cold, so once closed-loop is reached the fuel
+    trims go NEGATIVE (rich).  This is the dominant OBD-detectable consequence
+    and is modelled here with the same STFT→LTFT handoff as the fuel-system
+    fault, alongside the retarded timing.
     """
     actual = df["COOLANT_TEMPERATURE"].to_numpy(dtype=float)
 
@@ -331,6 +448,22 @@ def _inject_coolant_temp(
         df["TIMING_ADVANCE"].to_numpy(dtype=float) - timing_retard + noise(0.1),
         _TIMING_MIN,
         _TIMING_MAX,
+    )
+
+    # Rich fuel-trim bias (P1-2): negative STFT/LTFT from chronic cold-enrichment,
+    # with the same STFT-leads-then-hands-off-to-LTFT dynamics as a fuel fault.
+    stft_peak = np.full(len(ramp), _COOLANT_RICH_STFT_PEAK)
+    ltft_full = np.full(len(ramp), _COOLANT_RICH_LTFT)
+    stft_mean, ltft_delta = _steady_state_trim(ramp, stft_peak, ltft_full)
+    df["SHORT_TERM_FUEL_TRIM_BANK_1"] = np.clip(
+        df["SHORT_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + stft_mean + noise(0.5),
+        -_STFT_MAX,
+        _STFT_MAX,
+    )
+    df["LONG_TERM_FUEL_TRIM_BANK_1"] = np.clip(
+        df["LONG_TERM_FUEL_TRIM_BANK_1"].to_numpy(dtype=float) + ltft_delta + noise(0.1),
+        -_LTFT_MAX,
+        _LTFT_MAX,
     )
 
 
