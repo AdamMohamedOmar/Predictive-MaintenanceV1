@@ -1,0 +1,15 @@
+{
+  "vehicle": "toyota_unknown_ahmed",
+  "engine_metering": "MAF-based (speed-density model is trained on the Etios — see caveat)",
+  "fault_type": "none_known (presumed healthy)",
+  "source_export": "Torque / Car-Scanner ELM327 export '2026-06-02 16-38-35.csv'",
+  "adapter": "scripts/adapt_torque_csv.py",
+  "recording_character": "~11.5 min (695 s) at ~6 Hz round-robin; mostly parked idle (~900 rpm, speed 0) with occasional revs to ~2300 rpm. MAP pinned ~104 kPa (barometric) => MAF engine, so MAP carries no idle-vacuum signal.",
+  "sparse_pids": "Absolute pedal position D/E (4 raw readings each) and Commanded throttle actuator (10) are nearly empty; throttle-to-pedal features are weak.",
+  "cross_vehicle_result": {
+    "naive_etios_baseline": "100% windows -> air_system (conf ~0.52), anomaly saturated 1.0 on 64/64 — a baseline mismatch, NOT a real fault.",
+    "rebaselined_on_this_car": "models/ahmed_normalizer.pkl (first 5 min) -> 67% healthy, anomaly mean 0.60, 9/64 saturated.",
+    "how_to_use": "InferenceEngine(normalizer_override='models/ahmed_normalizer.pkl') or the dashboard normalizer picker."
+  },
+  "note": "Real recording from a different vehicle than training. Demonstrates the per-vehicle baseline-capture path; it is not a labelled fault recording."
+}
