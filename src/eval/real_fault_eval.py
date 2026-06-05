@@ -144,6 +144,11 @@ def evaluate_real_fault(
                     "forecasts": {
                         str(k): float(v) for k, v in state.forecasts.items()
                     },
+                    # Top SHAP features driving this prediction [[name, value], ...]
+                    "top_shap": [
+                        [str(name), float(val)]
+                        for name, val in (state.top_features or [])
+                    ],
                 }
             )
 
