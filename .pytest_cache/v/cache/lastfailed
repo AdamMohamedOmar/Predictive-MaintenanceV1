@@ -1,8 +1,3 @@
 {
-  "tests/test_stable_alerter.py::test_alert_requires_same_fault_class": true,
-  "tests/test_stable_alerter.py::test_mixed_windows_do_not_transition": true,
-  "tests/test_classifier.py::test_train_returns_fitted_rf": true,
-  "tests/test_forecaster.py::test_coolant_severity_zero_during_cold_start": true,
-  "tests/test_forecaster.py::test_coolant_severity_zero_when_loop_inactive": true,
-  "tests/test_forecaster.py::test_severity_full_fault_is_one": true
+  "tests/api/test_smoke_api.py::test_smoke_scores_ahmed_csv": true
 }
