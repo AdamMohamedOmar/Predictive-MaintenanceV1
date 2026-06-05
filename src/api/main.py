@@ -52,17 +52,6 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
-    # ── Temporary smoke endpoint (removed once recordings router is up) ───────
-    @app.post("/api/_smoke", tags=["meta"])
-    def smoke(csv_path: str, normalizer_path: str | None = None):
-        """Score a server-side adapted CSV path. Development only."""
-        from src.api.service import score_adapted_csv
-        result = score_adapted_csv(
-            Path(csv_path),
-            Path(normalizer_path) if normalizer_path else None,
-        )
-        return result["summary"]
-
     # ── Routers (registered incrementally as phases complete) ─────────────────
     # Phase 1:
     from src.api.routers import auth as auth_router
