@@ -46,8 +46,12 @@
 - Delete `models/my_test_vehicle_normalizer.pkl/.json` so nothing can load it.
 
 ### 2b. Baseline guardrails (the never-again fix)
-Added inside `process_captured_rows` (shared by live capture and CSV capture),
-with mirrored checks at load time in `InferenceEngine`'s normalizer-override path:
+Added inside `process_captured_rows` (shared by live capture and CSV capture).
+Rejection happens at **capture time only** — a load-time mirror was considered
+and dropped during planning: vehicles with unsupported PIDs legitimately produce
+std-0 *features* (NaN-fill design in live_baseline_capture.py:142-149), so a
+load-time variance check cannot distinguish them from mock junk. Raw-PID-level
+checks at capture time can. Guards:
 - **Reject** if any fitted feature std == 0 (constant input — synthetic, dead
   PID, or NaN-fallback filled).
 - **Reject** if `COOLANT_TEMPERATURE` is constant at exactly 90.0 across the
