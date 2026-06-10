@@ -26,7 +26,7 @@ def _make_warm_driving_csv(dest: Path, n_rows: int = 350) -> Path:
         "VEHICLE_SPEED": rng.uniform(20, 80, n),       # mean > 15 km/h guard
         "THROTTLE": rng.uniform(5, 60, n),
         "ENGINE_LOAD": rng.uniform(20, 70, n),
-        "COOLANT_TEMPERATURE": np.full(n, 90.0),        # >= 75 C guard
+        "COOLANT_TEMPERATURE": 90.0 + rng.normal(0, 0.3, n),    # >= 75 C, ±0.3 °C engine jitter
         "LONG_TERM_FUEL_TRIM_BANK_1": rng.uniform(-3, 3, n),
         "SHORT_TERM_FUEL_TRIM_BANK_1": rng.uniform(-2, 2, n),
         "INTAKE_MANIFOLD_PRESSURE": rng.uniform(30, 80, n),

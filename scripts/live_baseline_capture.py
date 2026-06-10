@@ -124,6 +124,33 @@ def process_captured_rows(
                 f"MAP_PER_THROTTLE won't calibrate correctly at idle."
             )
 
+    # ── Guard 2b: per-PID variance ────────────────────────────────────────────
+    # A real engine never produces a perfectly constant sensor over minutes of
+    # driving (even battery voltage jitters).  A constant present-PID means the
+    # capture source was synthetic/mock — fitting on it poisons every later
+    # z-score (the my_test_vehicle incident: healthy Yaris read 64/64
+    # air_system).  Absent PIDs (all-NaN) are exempt: NaN-fill below handles
+    # them by design.
+    cool = df.get("COOLANT_TEMPERATURE")
+    if cool is not None and cool.notna().any():
+        c = cool.dropna()
+        if float(c.std(ddof=0)) == 0.0 and float(c.iloc[0]) == 90.0:
+            raise ValueError(
+                "COOLANT_TEMPERATURE is frozen at exactly 90.0 °C for the whole "
+                "capture — that is the NaN-fallback constant, not a real engine. "
+                "Is a real vehicle connected (not the mock source)?"
+            )
+    for pid in USEFUL_PIDS:
+        col = df.get(pid)
+        if col is None or not col.notna().any():
+            continue  # absent PID — legitimately NaN-filled later
+        if float(col.dropna().std(ddof=0)) == 0.0:
+            raise ValueError(
+                f"{pid} has zero variance across {len(df)} rows — a real engine "
+                f"never produces a perfectly constant sensor. Baseline rejected "
+                f"(synthetic/mock capture suspected)."
+            )
+
     # ── Feature extraction (mirrors training pipeline exactly) ────────────────
     pid_cols = [p for p in USEFUL_PIDS if p in df.columns]
     feature_rows: list[dict] = []
@@ -137,6 +164,16 @@ def process_captured_rows(
             f"Only {len(feature_rows)} valid windows produced "
             f"(need >= {_MIN_WINDOWS}).  Drive for at least "
             f"{_MIN_WINDOWS * WINDOW_STRIDE_S // 60 + 1} minutes."
+        )
+
+    # ── Guard 4: closed-loop must be reached ──────────────────────────────────
+    # STFT/LTFT carry no information in open loop; a baseline whose every
+    # window is open-loop centres the trim features on frozen values.
+    if all(fr.get("FUEL_LOOP_ACTIVE", 0.0) < 0.5 for fr in feature_rows):
+        raise ValueError(
+            "ECU never reached closed-loop fuel control during the capture "
+            "(FUEL_LOOP_ACTIVE = 0 in every window). Warm the engine fully and "
+            "drive normally before capturing a baseline."
         )
 
     feat_df = pd.DataFrame(feature_rows)

@@ -23,7 +23,7 @@ def _make_warm_csv(dest: Path, n: int = 350) -> Path:
     rng = np.random.default_rng(7)
     data = {p: rng.uniform(10, 50, n) for p in USEFUL_PIDS}
     data["VEHICLE_SPEED"] = rng.uniform(20, 80, n)
-    data["COOLANT_TEMPERATURE"] = np.full(n, 90.0)
+    data["COOLANT_TEMPERATURE"] = 90.0 + rng.normal(0, 0.3, n)
     data["ENGINE_RPM"] = rng.uniform(800, 2500, n)
     df = pd.DataFrame(data)[list(USEFUL_PIDS)]
     dest.parent.mkdir(parents=True, exist_ok=True)
