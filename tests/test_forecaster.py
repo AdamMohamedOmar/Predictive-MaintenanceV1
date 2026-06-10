@@ -191,10 +191,11 @@ def test_fuel_system_severity_zero_when_loop_inactive():
 
 
 def test_tps_severity_deadband_suppresses_small_delta():
-    """Natural ratio variance below the deadband must yield severity 0."""
+    """Natural ratio variance below the deadband must yield severity 0.
+    Deadband is 0.05 (train-only derivation via scripts/derive_tps_deadband.py)."""
     feats = _healthy_features()
     feats["THROTTLE__mean"] = 25.0
-    feats["THROTTLE_TO_PEDAL_RATIO"] = 1.08  # 0.08 above baseline (within 0.10 deadband)
+    feats["THROTTLE_TO_PEDAL_RATIO"] = 1.03  # 0.03 delta — below 0.05 deadband
     sev = compute_severity(feats, "throttle_position_sensor", _healthy_baselines())
     assert sev == 0.0
 

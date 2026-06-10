@@ -68,7 +68,7 @@ _WARMUP_RATE_HEALTHY = 0.5       # °C/min — at/above this the engine is activ
 # a ~0.35 throttle-vs-pedal over-read (a 35 % divergence is an unambiguous TPS
 # correlation fault — cf. P2135 correlation-error diagnostics).
 _TPS_SCALE = 0.15                # maps (deadband → 0.35 over-read) onto [0, 1]
-_TPS_DEADBAND = 0.20             # healthy cross-session ratio scatter (live12 had 0.19 Δ) — no fault below this
+_TPS_DEADBAND = 0.05             # healthy cross-session ratio scatter (TRAIN only: 0.032 Δ across live5-11) + 0.02 margin — derived via scripts/derive_tps_deadband.py
 _TPS_MIN_THROTTLE_MEAN = 15.0    # below this throttle mean, ratio is unstable (idle/coast)
 
 # Gate: suppress fuel-trim and coolant severity when the ECU has not yet entered
