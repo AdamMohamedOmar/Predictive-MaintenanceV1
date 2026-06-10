@@ -12,8 +12,8 @@
   },
   "fuel_system": {
     "fault_type": "fuel_system",
-    "mae": 0.12436583206441293,
-    "mae_pct_of_range": 12.436583206441293,
+    "mae": 0.12406767437359813,
+    "mae_pct_of_range": 12.406767437359813,
     "meets_commit_target": true,
     "meets_stretch_target": false,
     "n_train": 797,
@@ -34,13 +34,13 @@
   },
   "throttle_position_sensor": {
     "fault_type": "throttle_position_sensor",
-    "mae": 0.19571620850454152,
-    "mae_pct_of_range": 19.571620850454153,
+    "mae": 0.0634801440820954,
+    "mae_pct_of_range": 6.34801440820954,
     "meets_commit_target": true,
-    "meets_stretch_target": false,
+    "meets_stretch_target": true,
     "n_train": 797,
     "n_test": 209,
-    "severity_target_mean": 0.6320059919255642,
-    "severity_target_std": 0.29157404477757953
+    "severity_target_mean": 0.7638421757889592,
+    "severity_target_std": 0.15925504177791985
   }
 }
