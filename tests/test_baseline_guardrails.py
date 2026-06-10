@@ -69,3 +69,16 @@ def test_absent_pid_is_exempt_from_variance_guard():
         r["ACCELERATOR_PEDAL_POSITION_D"] = float("nan")
     norm, meta = process_captured_rows(rows, vehicle_name="no-pedal")
     assert meta["n_windows"] >= 20
+
+
+def test_csv_capture_path_rejects_mock_like_file(tmp_path):
+    """capture_baseline_from_csv funnels into process_captured_rows — the
+    guards must hold for file-based captures too."""
+    import pandas as pd
+    from scripts.capture_baseline_from_csv import capture_baseline_from_csv
+
+    rows = _mk_rows(coolant=90.0)
+    csv = tmp_path / "mock_drive.csv"
+    pd.DataFrame(rows).to_csv(csv, index=False)
+    with pytest.raises(ValueError, match="90.0"):
+        capture_baseline_from_csv(csv, vehicle_name="mock", out_path=tmp_path / "m.pkl")
