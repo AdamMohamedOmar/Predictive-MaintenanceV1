@@ -1,11 +1,11 @@
 """Physics-constrained fault injection for OBD-II time-series data.
 
 Ramp mode: each fault degrades linearly from zero to full magnitude over
-`ramp_len` seconds, then holds at full magnitude. This models gradual wear
-or progressive sensor degradation — the academically-useful mode for a
-predictive maintenance paper.
+`ramp_len` seconds, then holds at full magnitude. Models gradual wear or
+progressive sensor degradation.
 
-Step mode (sudden onset) is reserved for a later iteration.
+Step mode: ``ramp_len = 1`` — fault is fully developed one row after onset.
+Physics clamps (1 °C/s coolant inertia, ±25 % fuel trim, etc.) still apply.
 
 Usage
 -----
@@ -196,6 +196,7 @@ def inject_session(
     df: pd.DataFrame,
     fault_type: FaultType,
     *,
+    mode: Literal["ramp", "step"] = "ramp",
     onset_fraction: float = 0.40,
     ramp_fraction: float = 0.15,
     magnitude: float | None = None,
@@ -213,12 +214,17 @@ def inject_session(
         Clean session from ``load_carobd_csv``.
     fault_type : FaultType
         One of the 4 supported fault strings.
+    mode : {"ramp", "step"}
+        "ramp" — fault degrades linearly over ``ramp_fraction`` of the session.
+        "step" — fault is fully developed one row after onset (``ramp_len = 1``).
+        Physics clamps (e.g. 1 °C/s coolant inertia) still apply in step mode.
     onset_fraction : float
         Fraction of session rows before fault onset (default 0.40 = 40 %).
         A pre-fault baseline period helps the classifier distinguish healthy
         from early-fault windows.
     ramp_fraction : float
         Fraction of session rows used for the ramp-up (default 0.15 = 15 %).
+        Ignored when mode="step".
     magnitude : float or None
         Fault-specific magnitude. Falls back to ``_DEFAULT_MAGNITUDE`` if None.
     noise_std : float
@@ -233,7 +239,7 @@ def inject_session(
     """
     n = len(df)
     onset = int(n * onset_fraction)
-    ramp_len = max(1, int(n * ramp_fraction))
+    ramp_len = 1 if mode == "step" else max(1, int(n * ramp_fraction))
     mag = magnitude if magnitude is not None else _DEFAULT_MAGNITUDE[fault_type]
 
     params = InjectionParams(

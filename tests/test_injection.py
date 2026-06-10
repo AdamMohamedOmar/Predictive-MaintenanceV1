@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 from src.injection import InjectionParams, inject_fault, inject_session
-from src.injection.fault_injector import _build_ramp, _DEFAULT_MAGNITUDE
+from src.injection.fault_injector import _build_ramp, _COOLANT_MAX_DELTA, _DEFAULT_MAGNITUDE
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = REPO_ROOT / "data" / "raw" / "carOBD" / "drive1.csv"
@@ -398,3 +398,52 @@ def test_inject_session_on_real_data_all_faults():
         # All injected PIDs must stay within pandas float64 (no NaN or inf)
         assert out.select_dtypes("number").notna().all().all()
         assert np.isfinite(out.select_dtypes("number").values).all()
+
+
+# ─── Step injection mode ─────────────────────────────────────────────────────
+
+def test_step_mode_reaches_full_magnitude_within_one_row():
+    """Step mode must have ramp=1.0 at onset+1, not spread over ramp_fraction rows.
+    Check by comparing LTFT delta 2 rows post-onset: step ≥ 40% of magnitude,
+    ramp (15% ramp_fraction) ≈ 0 (only 2/45 of ramp completed)."""
+    df = _make_session(n=300)
+    df["LONG_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    df["SHORT_TERM_FUEL_TRIM_BANK_1"] = 0.0
+    onset = int(0.40 * 300)  # 120
+    magnitude = 18.0
+
+    out_step = inject_session(
+        df, "fuel_system", mode="step",
+        onset_fraction=0.40, magnitude=magnitude, noise_std=0.0, random_seed=0,
+    )
+    ltft_step = out_step["LONG_TERM_FUEL_TRIM_BANK_1"].iloc[onset + 2]
+    assert ltft_step >= magnitude * 0.4, (
+        f"Step: LTFT at onset+2 should be ≥40% of {magnitude}%, got {ltft_step:.2f}%"
+    )
+
+    out_ramp = inject_session(
+        df, "fuel_system", mode="ramp",
+        onset_fraction=0.40, ramp_fraction=0.15, magnitude=magnitude,
+        noise_std=0.0, random_seed=0,
+    )
+    ltft_ramp = out_ramp["LONG_TERM_FUEL_TRIM_BANK_1"].iloc[onset + 2]
+    assert ltft_ramp < 1.0, (
+        f"Ramp: LTFT at onset+2 should be near-zero (ramp at 2/45 ≈ 4%), got {ltft_ramp:.2f}%"
+    )
+
+
+def test_step_mode_coolant_still_respects_thermal_inertia():
+    """Even with ramp_len=1, the 1°C/sample thermal inertia clamp must hold.
+    A stuck ECT sensor is an electrical fault — the coolant fluid itself cannot
+    jump temperature faster than physics allows."""
+    df = _make_session(n=300)
+    df["COOLANT_TEMPERATURE"] = 90.0
+    out = inject_session(
+        df, "coolant_temp_sensor", mode="step",
+        onset_fraction=0.40, magnitude=42.0, noise_std=0.0, random_seed=0,
+    )
+    coolant = out["COOLANT_TEMPERATURE"].to_numpy()
+    max_delta = float(np.abs(np.diff(coolant)).max())
+    assert max_delta <= _COOLANT_MAX_DELTA + 1e-9, (
+        f"Thermal inertia violated in step mode: max Δ={max_delta:.4f}°C/s > {_COOLANT_MAX_DELTA}"
+    )

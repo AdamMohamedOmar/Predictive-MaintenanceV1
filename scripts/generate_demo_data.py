@@ -62,6 +62,7 @@ def main() -> None:
         injected = inject_session(
             df,
             fault_type=fault_type,
+            mode=mode,
             onset_fraction=onset,
             magnitude=magnitude,
             random_seed=42,
