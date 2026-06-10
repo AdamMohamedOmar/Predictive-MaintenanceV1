@@ -23,9 +23,13 @@ import math
 from pathlib import Path
 from typing import Optional
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from src.api.config import DATA_APP_DIR
 from src.api.db import get_db
+from src.api.live_store import LiveSessionStore
 from src.api.models import Car
 
 log = logging.getLogger(__name__)
@@ -157,6 +161,11 @@ async def _run_session(ws: WebSocket) -> None:
     obd_src.start()
     log.info("Live WS: poll thread started — streaming.")
 
+    session_ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    store = LiveSessionStore(DATA_APP_DIR / "live_sessions" / session_ts)
+    last_elapsed = {"s": 0}
+    log.info("Live WS: persisting session to %s", store.session_dir)
+
     # ── Concurrent recv + poll ────────────────────────────────────────────────
     stop_event = asyncio.Event()
 
@@ -175,7 +184,12 @@ async def _run_session(ws: WebSocket) -> None:
                     break
                 elif action == "mark_leak":
                     state_val = action_msg.get("state", "")
-                    await ws.send_json({"type": "mark_ack", "state": state_val})
+                    store.record_mark(state=state_val, elapsed_s=last_elapsed["s"])
+                    await ws.send_json({
+                        "type": "mark_ack",
+                        "state": state_val,
+                        "elapsed_s": last_elapsed["s"],
+                    })
             except asyncio.TimeoutError:
                 pass  # normal — client is just not sending anything
             except (WebSocketDisconnect, RuntimeError):
@@ -201,6 +215,9 @@ async def _run_session(ws: WebSocket) -> None:
                 log.warning("Live WS engine.update: %s", exc)
                 await asyncio.sleep(0.1)
                 continue
+
+            last_elapsed["s"] = state.elapsed_s
+            store.append_row(elapsed_s=state.elapsed_s, row=row)
 
             poll_hz = obd_src.measured_poll_hz
             degraded = len(obd_src.missing_pids)
@@ -251,6 +268,8 @@ async def _run_session(ws: WebSocket) -> None:
         await asyncio.gather(_recv(), _poll())
     finally:
         obd_src.stop()
+        store.close()
+        log.info("Live WS: session saved — %s", store.session_dir)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
