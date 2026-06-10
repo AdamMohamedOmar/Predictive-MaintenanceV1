@@ -46,6 +46,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.features.extractor import feature_names
 from src.features.regime import regime_feature_names
+from src.features.severity import compute_baselines
 
 _FEAT_COLS = feature_names()
 
@@ -73,6 +74,12 @@ class BaselineNormalizer:
         # Healthy-window means of regime one-hot flags, stored at fit() time
         # so that feature_means() can reconstruct the full 83-element vector.
         self._regime_means: np.ndarray | None = None
+        # Severity-formula baselines captured at fit() time with the SAME
+        # definition used to build forecast targets (compute_baselines —
+        # active-throttle windows only for the TPS ratio).  Deriving these
+        # from feature_means at inference silently used a different
+        # definition (all windows incl. idle fallback=1.0) — train/serve skew.
+        self._severity_baselines: "dict[str, float] | None" = None
 
     def fit(self, df: pd.DataFrame, healthy_label: str = "healthy") -> "BaselineNormalizer":
         """Fit the scaler on healthy windows in *df*.
@@ -92,6 +99,7 @@ class BaselineNormalizer:
         self._scaler = StandardScaler()
         self._scaler.fit(healthy[_CONTINUOUS_COLS].to_numpy(dtype=float))
         self._regime_means = healthy[_REGIME_COL_LIST].mean().to_numpy(dtype=float)
+        self._severity_baselines = compute_baselines(healthy)
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -130,9 +138,13 @@ class BaselineNormalizer:
         # Store feature_order alongside the scaler so a future load can detect
         # if the codebase has added/removed/reordered features since training.
         # Old pickles (raw StandardScaler) are still accepted by load() below.
+        # severity_baselines is a plain dict[str, float] — safe to bundle alongside
+        # the existing sklearn StandardScaler (established project serialization pattern).
         bundle: dict = {"scaler": self._scaler, "feature_order": list(_FEAT_COLS)}
         if self._regime_means is not None:
             bundle["regime_means"] = self._regime_means
+        if self._severity_baselines is not None:
+            bundle["severity_baselines"] = self._severity_baselines
         with open(path, "wb") as f:
             pickle.dump(bundle, f)
 
@@ -152,11 +164,19 @@ class BaselineNormalizer:
                 )
             norm._scaler = bundle["scaler"]
             norm._regime_means = bundle.get("regime_means")  # None for pre-T5.1 artefacts
+            norm._severity_baselines = bundle.get("severity_baselines")  # None for pre-T7 artefacts
         else:
             # Legacy format (v1): raw StandardScaler — accept without version check.
             # This keeps old Skoda baseline pickles working after a code update.
             norm._scaler = bundle
         return norm
+
+    @property
+    def severity_baselines(self) -> "dict[str, float] | None":
+        """Baselines for compute_severity, captured at fit() time.  None for
+        artefacts saved before this field existed (engine falls back to
+        feature_means for those)."""
+        return getattr(self, "_severity_baselines", None)
 
     @property
     def is_fitted(self) -> bool:

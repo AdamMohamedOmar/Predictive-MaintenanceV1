@@ -101,3 +101,41 @@ def test_feature_means_before_fit_raises():
     norm = BaselineNormalizer()
     with pytest.raises(RuntimeError, match="fit"):
         _ = norm.feature_means
+
+
+# ─── severity_baselines (T7) ─────────────────────────────────────────────────
+
+def test_severity_baselines_use_active_throttle_windows_only():
+    """The TPS ratio baseline must ignore idle windows (extractor fallback=1.0).
+    A global mean would be 0.75 here; the active-window baseline is 0.5."""
+    rows = []
+    for _ in range(10):  # active-throttle windows: true vehicle ratio 0.5
+        r = {c: 0.0 for c in feature_names()}
+        r["THROTTLE__mean"] = 30.0
+        r["THROTTLE_TO_PEDAL_RATIO"] = 0.5
+        r["label"] = "healthy"
+        rows.append(r)
+    for _ in range(10):  # idle windows: extractor neutral fallback
+        r = {c: 0.0 for c in feature_names()}
+        r["THROTTLE__mean"] = 3.0
+        r["THROTTLE_TO_PEDAL_RATIO"] = 1.0
+        r["label"] = "healthy"
+        rows.append(r)
+
+    norm = BaselineNormalizer().fit(pd.DataFrame(rows))
+    assert norm.severity_baselines is not None
+    assert norm.severity_baselines["THROTTLE_TO_PEDAL_RATIO"] == pytest.approx(0.5)
+
+
+def test_severity_baselines_survive_save_load(tmp_path):
+    rows = []
+    for _ in range(5):
+        r = {c: 1.0 for c in feature_names()}
+        r["THROTTLE__mean"] = 30.0
+        r["label"] = "healthy"
+        rows.append(r)
+    norm = BaselineNormalizer().fit(pd.DataFrame(rows))
+    norm.save(tmp_path / "n.pkl")
+
+    loaded = BaselineNormalizer.load(tmp_path / "n.pkl")
+    assert loaded.severity_baselines == norm.severity_baselines

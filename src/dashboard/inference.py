@@ -210,6 +210,12 @@ class InferenceEngine:
         self._baselines: dict[str, float] = {
             feat: float(mean_arr[i]) for i, feat in enumerate(feat_cols)
         }
+        # Prefer the fit-time severity baselines (same definition as the
+        # forecast targets — TPS ratio from active-throttle windows only).
+        # Old artefacts lack the field; feature_means stays the fallback.
+        fit_baselines = getattr(norm, "severity_baselines", None)
+        if fit_baselines:
+            self._baselines.update(fit_baselines)
 
         # Per-session stateful components (reset between files)
         self._cold_start = ColdStartChecker()
