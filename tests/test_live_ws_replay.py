@@ -40,3 +40,18 @@ def test_replay_session_streams_frames(monkeypatch, tmp_path):
     assert f["poll_hz"] >= 0.0
 
 
+@pytest.mark.skipif(not DEMO.exists(), reason="demo CSV not generated")
+def test_replay_sessions_are_armed(monkeypatch):
+    monkeypatch.setenv("PM_ALLOW_REPLAY", "1")
+    monkeypatch.setenv("PM_REPLAY_FAST", "1")
+    client = TestClient(app)
+    with client.websocket_connect("/api/ws/live") as ws:
+        ws.send_text(json.dumps({"action": "connect", "port": f"replay:{DEMO}", "car_id": None}))
+        for _ in range(20):
+            msg = ws.receive_json()
+            if msg["type"] == "telemetry":
+                assert msg["armed"] is True
+                break
+        ws.send_text(json.dumps({"action": "stop"}))
+
+

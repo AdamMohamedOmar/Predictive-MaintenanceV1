@@ -148,6 +148,13 @@ async def _run_session(ws: WebSocket) -> None:
         finally:
             db.close()
 
+    # A car with no valid per-vehicle baseline runs DISARMED: telemetry and
+    # timeline stream, but fault alerts are suppressed — the Etios-trained
+    # z-scores are meaningless on another vehicle (the Yaris 64/64 incident).
+    armed = normalizer_path is not None or (
+        port is not None and port.startswith("replay:")
+    )
+
     # ── Load InferenceEngine (blocking SHAP init → run in thread) ─────────────
     try:
         engine = await asyncio.to_thread(_load_engine, normalizer_path)
@@ -269,6 +276,9 @@ async def _run_session(ws: WebSocket) -> None:
                     })
                 prev_rule_count = len(state.rule_alerts)
 
+            if not armed:
+                alert_events = []
+
             for ev in alert_events:
                 store.record_alert(ev)
 
@@ -294,6 +304,7 @@ async def _run_session(ws: WebSocket) -> None:
                 "degraded_pid_count": degraded,
                 "poll_hz": round(poll_hz, 3),
                 "alert_events": alert_events,
+                "armed": armed,
             }
 
             try:
