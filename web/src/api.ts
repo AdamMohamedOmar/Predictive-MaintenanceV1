@@ -109,6 +109,8 @@ export async function uploadRecording(
 
 export const getRecording = (id: number) => fetchJson<RecordingDetail>(`/api/recordings/${id}`);
 export const listRecordings = (carId: number) => fetchJson<RecordingOut[]>(`/api/cars/${carId}/recordings`);
+export interface RecordingRows { rows: Record<string, number | null>[]; stride_s: number; n_total: number }
+export const getRecordingRows = (id: number) => fetchJson<RecordingRows>(`/api/recordings/${id}/rows`);
 
 // ── Live ─────────────────────────────────────────────────────────────────────
 

@@ -10,12 +10,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+import pandas as pd
+
 from src.api.auth import current_user
 from src.api.config import DATA_APP_DIR
 from src.api.db import get_db
 from src.api.models import Car, Recording, User
 from src.api.routers.cars import _own_car
 from src.api.schemas import BaselineOut, RecordingDetail, RecordingOut
+from src.config import USEFUL_PIDS
 
 router = APIRouter(tags=["recordings"])
 
@@ -155,6 +158,35 @@ def get_recording(
         result=result,
         inspect=inspect,
     )
+
+
+@router.get("/recordings/{recording_id}/rows")
+def get_recording_rows(
+    recording_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Return downsampled PID rows for post-hoc SensorTimeline rendering."""
+    rec = db.get(Recording, recording_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Recording not found.")
+    car = db.get(Car, rec.car_id)
+    if car is None or car.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Recording not found.")
+    if not rec.adapted_csv_path or not Path(rec.adapted_csv_path).exists():
+        raise HTTPException(status_code=404, detail="No adapted CSV for this recording.")
+
+    df = pd.read_csv(rec.adapted_csv_path)
+    stride = max(1, len(df) // 1200)  # cap payload ~1200 points for charting
+    pid_cols = [p for p in USEFUL_PIDS if p in df.columns]
+    rows = []
+    for i in range(0, len(df), stride):
+        r: dict = {"elapsed_s": int(i)}
+        for p in pid_cols:
+            v = df[p].iloc[i]
+            r[p] = None if pd.isna(v) else float(v)
+        rows.append(r)
+    return {"rows": rows, "stride_s": stride, "n_total": len(df)}
 
 
 @router.get("/cars/{car_id}/recordings", response_model=list[RecordingOut])

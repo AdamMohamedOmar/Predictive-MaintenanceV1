@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRecording, type RecordingDetail, type OBDWindow } from '../api';
+import { getRecording, getRecordingRows, type RecordingDetail, type OBDWindow, type RecordingRows } from '../api';
 import { T, FAULT_DISPLAY, DIAGNOSTIC_STEPS } from '../theme';
 import StatusBanner from '../components/StatusBanner';
 import SeverityGrid from '../components/SeverityGrid';
 import AnomalyPanel from '../components/AnomalyPanel';
-import PidStrip from '../components/PidStrip';
+import SensorTimeline from '../components/SensorTimeline';
 import ShapPanel from '../components/ShapPanel';
 
 export default function Results() {
   const { carId, rid } = useParams<{ carId: string; rid: string }>();
   const nav = useNavigate();
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
+  const [rowsData, setRowsData] = useState<RecordingRows | null>(null);
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    getRecording(Number(rid)).then(setDetail).catch(e => setErr(e.message ?? 'Failed to load'));
+    const n = Number(rid);
+    getRecording(n).then(setDetail).catch(e => setErr(e.message ?? 'Failed to load'));
+    getRecordingRows(n).then(setRowsData).catch(() => {});
   }, [rid]);
 
   if (err) return <Msg color={T.ACCENT_ALERT}>{err}</Msg>;
@@ -39,8 +42,12 @@ export default function Results() {
   const anomalyMean = recording.anomaly_mean ?? (windows.length ? windows.reduce((s, w) => s + w.anomaly_score, 0) / windows.length : 0);
   const avgConf = windows.length ? windows.reduce((s, w) => s + w.confidence, 0) / windows.length : 0;
 
-  // Build PID strip data — only if telemetry is available (future recordings)
-  const pidData: { elapsed_s: number; [k: string]: number }[] = [];
+  // Alert onset markers: first window of each new fault label (transitions only)
+  const alertMarkers = windows
+    .filter((w, i, ws) =>
+      w.label !== 'healthy' && w.label !== 'cold_start' &&
+      (i === 0 || ws[i - 1].label !== w.label))
+    .map(w => ({ elapsed_s: w.elapsed_s, label: w.label }));
 
   // Diagnostic steps for the dominant fault
   const steps = DIAGNOSTIC_STEPS[dominant] ?? [];
@@ -90,7 +97,13 @@ export default function Results() {
 
         <SeverityGrid severities={severities} forecasts={forecasts} />
         <AnomalyPanel score={anomalyMean} />
-        <PidStrip data={pidData} />
+        {rowsData && (
+          <SensorTimeline
+            rows={rowsData.rows.map(r => ({ ...r, elapsed_s: (r.elapsed_s as number) })) as Record<string, number>[]}
+            alerts={alertMarkers}
+            withBrush
+          />
+        )}
         <ShapPanel topShap={topShap} />
 
         {/* Diagnostic steps */}
