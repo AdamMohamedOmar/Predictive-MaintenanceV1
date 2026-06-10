@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getCar, listRecordings, uploadRecording, type Car, type RecordingOut, type BaselineOut } from '../api';
 import { T } from '../theme';
 import LiveSession from '../components/LiveSession';
+import CalibrationCard from '../components/CalibrationCard';
 
 type Tab = 'overview' | 'upload' | 'live' | 'history';
 
@@ -51,7 +52,7 @@ export default function CarPage() {
       </div>
 
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '28px 24px' }}>
-        {tab === 'overview' && <Overview car={car} recordings={recordings} onOpen={r => nav(`/cars/${id}/recordings/${r.id}`)} />}
+        {tab === 'overview' && <Overview car={car} recordings={recordings} onOpen={r => nav(`/cars/${id}/recordings/${r.id}`)} onCalibrated={() => getCar(id).then(setCar)} />}
         {tab === 'upload' && <UploadTab car={car} carId={id} onBaseline={c => setCar(c)} />}
         {tab === 'live' && <LiveSession carId={id} />}
         {tab === 'history' && <History recordings={recordings} onOpen={r => nav(`/cars/${id}/recordings/${r.id}`)} />}
@@ -61,9 +62,10 @@ export default function CarPage() {
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
-function Overview({ car, recordings, onOpen }: { car: Car; recordings: RecordingOut[]; onOpen: (r: RecordingOut) => void }) {
+function Overview({ car, recordings, onOpen, onCalibrated }: { car: Car; recordings: RecordingOut[]; onOpen: (r: RecordingOut) => void; onCalibrated: () => void }) {
   return (
     <div>
+      <CalibrationCard car={car} onCalibrated={onCalibrated} />
       <div style={{ background: T.BG_SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: '20px 24px', marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
           {[['Make', car.make], ['Model', car.model], ['Year', String(car.year)], ['Engine metering', car.engine_metering]].map(([k, v]) => (
