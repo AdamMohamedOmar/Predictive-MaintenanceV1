@@ -140,16 +140,20 @@ def process_captured_rows(
                 "capture — that is the NaN-fallback constant, not a real engine. "
                 "Is a real vehicle connected (not the mock source)?"
             )
-    for pid in USEFUL_PIDS:
-        col = df.get(pid)
-        if col is None or not col.notna().any():
-            continue  # absent PID — legitimately NaN-filled later
-        if float(col.dropna().std(ddof=0)) == 0.0:
-            raise ValueError(
-                f"{pid} has zero variance across {len(df)} rows — a real engine "
-                f"never produces a perfectly constant sensor. Baseline rejected "
-                f"(synthetic/mock capture suspected)."
-            )
+    # Per-PID variance check is skipped in allow_idle mode: a parked real engine
+    # has constant VEHICLE_SPEED, pedal positions, AIR_TEMP, etc. by design.
+    # The coolant-90.0 specific check above is sufficient to catch mock data.
+    if not allow_idle:
+        for pid in USEFUL_PIDS:
+            col = df.get(pid)
+            if col is None or not col.notna().any():
+                continue  # absent PID — legitimately NaN-filled later
+            if float(col.dropna().std(ddof=0)) == 0.0:
+                raise ValueError(
+                    f"{pid} has zero variance across {len(df)} rows — a real engine "
+                    f"never produces a perfectly constant sensor. Baseline rejected "
+                    f"(synthetic/mock capture suspected)."
+                )
 
     # ── Feature extraction (mirrors training pipeline exactly) ────────────────
     pid_cols = [p for p in USEFUL_PIDS if p in df.columns]
@@ -209,6 +213,16 @@ def process_captured_rows(
         "feature_stds": scaler_stds,
     }
     return norm, metadata
+
+
+def save_normalizer_bundle(norm, metadata: dict, out_path: Path) -> Path:
+    """Persist a fitted per-vehicle normalizer + its sidecar JSON."""
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    norm.save(out_path)
+    with open(out_path.with_suffix(".json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+    return out_path
 
 
 # ── Hardware-touching shell ───────────────────────────────────────────────────
@@ -283,13 +297,7 @@ def run_capture(
         print("\n  Redo the capture drive and try again.")
         return 1
 
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    norm.save(out_path)
-
-    meta_path = out_path.with_suffix(".json")
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
+    save_normalizer_bundle(norm, meta, out_path)
 
     print(f"\n[OK] Baseline saved:")
     print(f"     Normaliser : {out_path}")

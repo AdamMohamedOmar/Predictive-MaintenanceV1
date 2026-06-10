@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.api.config import DATA_APP_DIR
+from src.config import MODELS_DIR
 from src.api.db import get_db
 from src.api.live_store import LiveSessionStore
 from src.api.models import Car
@@ -131,6 +132,8 @@ async def _run_session(ws: WebSocket) -> None:
 
     port: Optional[str] = msg.get("port") or None
     car_id: Optional[int] = msg.get("car_id")
+    mode: str = msg.get("mode", "monitor")
+    allow_idle: bool = bool(msg.get("allow_idle", False))
 
     # ── Look up car's normalizer path ─────────────────────────────────────────
     normalizer_path: Optional[Path] = None
@@ -154,13 +157,6 @@ async def _run_session(ws: WebSocket) -> None:
     armed = normalizer_path is not None or (
         port is not None and port.startswith("replay:")
     )
-
-    # ── Load InferenceEngine (blocking SHAP init → run in thread) ─────────────
-    try:
-        engine = await asyncio.to_thread(_load_engine, normalizer_path)
-    except Exception as exc:
-        await ws.send_json({"type": "error", "message": f"Model load failed: {exc}"})
-        return
 
     # ── Connect OBD source (ELM327 or replay fallback) ───────────────────────
     import os
@@ -192,6 +188,18 @@ async def _run_session(ws: WebSocket) -> None:
 
     obd_src.start()
     log.info("Live WS: poll thread started — streaming.")
+
+    # Calibrate mode: collect rows, fit baseline, persist; no inference engine needed.
+    if mode == "calibrate":
+        await _run_calibration(ws, obd_src, car_id, allow_idle=allow_idle)
+        return
+
+    # ── Load InferenceEngine (blocking SHAP init → run in thread) ─────────────
+    try:
+        engine = await asyncio.to_thread(_load_engine, normalizer_path)
+    except Exception as exc:
+        await ws.send_json({"type": "error", "message": f"Model load failed: {exc}"})
+        return
 
     session_ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     store = LiveSessionStore(DATA_APP_DIR / "live_sessions" / session_ts)
@@ -335,6 +343,83 @@ async def _run_session(ws: WebSocket) -> None:
         obd_src.stop()
         store.close()
         log.info("Live WS: session saved — %s", store.session_dir)
+
+
+async def _run_calibration(
+    ws: WebSocket, obd_src, car_id: Optional[int], *, allow_idle: bool = False
+) -> None:
+    """Collect rows until the client sends finish_calibration (or 12 min cap),
+    then fit through the guarded process_captured_rows and persist per-car."""
+    from scripts.live_baseline_capture import process_captured_rows, save_normalizer_bundle
+
+    session_ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    store = LiveSessionStore(DATA_APP_DIR / "live_sessions" / f"{session_ts}_calibration")
+    rows: list[dict] = []
+    finish = asyncio.Event()
+
+    async def _recv() -> None:
+        while not finish.is_set():
+            try:
+                raw = await asyncio.wait_for(ws.receive_text(), timeout=0.25)
+                action = json.loads(raw).get("action")
+                if action in ("finish_calibration", "stop"):
+                    finish.set()
+            except asyncio.TimeoutError:
+                pass
+            except (WebSocketDisconnect, RuntimeError, json.JSONDecodeError):
+                finish.set()
+
+    async def _collect() -> None:
+        while not finish.is_set() and len(rows) < 720:  # 12 min hard cap
+            row = obd_src.next_row()
+            if row is None:
+                await asyncio.sleep(0.05)
+                continue
+            rows.append(row)
+            store.append_row(elapsed_s=len(rows) - 1, row=row)
+            if len(rows) % 5 == 0:
+                try:
+                    await ws.send_json({
+                        "type": "calibrate_progress",
+                        "rows_collected": len(rows),
+                        "elapsed_s": len(rows) - 1,
+                    })
+                except (RuntimeError, WebSocketDisconnect):
+                    finish.set()
+
+    try:
+        await asyncio.gather(_recv(), _collect())
+    finally:
+        obd_src.stop()
+        store.close()
+
+    try:
+        norm, meta = await asyncio.to_thread(
+            process_captured_rows, rows,
+            f"car_{car_id}" if car_id is not None else "uncatalogued",
+            None, 1.0, allow_idle,
+        )
+    except ValueError as exc:
+        await ws.send_json({"type": "calibrate_result", "ok": False, "reason": str(exc)})
+        return
+
+    out = MODELS_DIR / f"car_{car_id}_normalizer.pkl"
+    await asyncio.to_thread(save_normalizer_bundle, norm, meta, out)
+
+    if car_id is not None:
+        db = next(get_db())
+        try:
+            car = db.get(Car, int(car_id))
+            if car:
+                car.baseline_normalizer_path = str(out)
+                db.commit()
+        finally:
+            db.close()
+
+    await ws.send_json({
+        "type": "calibrate_result", "ok": True,
+        "n_windows": meta["n_windows"], "path": str(out),
+    })
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

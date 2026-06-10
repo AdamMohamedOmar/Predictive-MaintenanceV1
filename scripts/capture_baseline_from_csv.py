@@ -41,7 +41,7 @@ _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
 from src.config import MODELS_DIR, USEFUL_PIDS
-from scripts.live_baseline_capture import process_captured_rows
+from scripts.live_baseline_capture import process_captured_rows, save_normalizer_bundle
 
 
 def capture_baseline_from_csv(
@@ -91,16 +91,8 @@ def capture_baseline_from_csv(
     if out_path is None:
         slug = vehicle_name.lower().replace(" ", "_")
         out_path = MODELS_DIR / f"{slug}_normalizer.pkl"
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    norm.save(out_path)
-
-    meta_path = out_path.with_suffix(".json")
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
-
-    return out_path
+    return save_normalizer_bundle(norm, meta, out_path)
 
 
 def main() -> int:
