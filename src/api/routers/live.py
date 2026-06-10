@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import math
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -208,6 +209,7 @@ async def _run_session(ws: WebSocket) -> None:
 
     # ── Concurrent recv + poll ────────────────────────────────────────────────
     stop_event = asyncio.Event()
+    latencies_ms: list[float] = []
 
     async def _recv() -> None:
         """Listen for client actions (mark_leak, stop) until disconnect."""
@@ -275,6 +277,7 @@ async def _run_session(ws: WebSocket) -> None:
                 continue
 
             no_data_s = 0.0
+            t_poll = time.time()
             # XGBoost + SHAP are CPU-bound — run in the default thread executor
             # so the event loop stays responsive to incoming actions.
             try:
@@ -334,6 +337,7 @@ async def _run_session(ws: WebSocket) -> None:
                     for n, v in (state.top_features or [])
                     if not _is_nan(v)
                 ],
+                "t_poll": round(t_poll, 3),
                 "degraded_pid_count": degraded,
                 "missing_pids": list(obd_src.missing_pids),
                 "poll_hz": round(poll_hz, 3),
@@ -346,6 +350,7 @@ async def _run_session(ws: WebSocket) -> None:
             except (RuntimeError, WebSocketDisconnect):
                 stop_event.set()
                 break
+            latencies_ms.append((time.time() - t_poll) * 1000.0)
 
             # Warn once when the adapter is too slow (< 0.3 Hz)
             if not warned_slow and 0 < poll_hz < 0.3:
@@ -369,6 +374,15 @@ async def _run_session(ws: WebSocket) -> None:
         obd_src.stop()
         store.close()
         log.info("Live WS: session saved — %s", store.session_dir)
+        if latencies_ms:
+            import numpy as np
+            (Path("results") / "latency_v1.json").write_text(json.dumps({
+                "n": len(latencies_ms),
+                "p50_ms": round(float(np.percentile(latencies_ms, 50)), 2),
+                "p95_ms": round(float(np.percentile(latencies_ms, 95)), 2),
+                "p99_ms": round(float(np.percentile(latencies_ms, 99)), 2),
+                "max_ms": round(float(max(latencies_ms)), 2),
+            }, indent=2))
 
 
 async def _run_calibration(
