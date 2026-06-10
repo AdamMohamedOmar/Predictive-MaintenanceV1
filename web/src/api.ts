@@ -32,13 +32,24 @@ export interface InspectReport {
 }
 export interface RecordingDetail { recording: RecordingOut; result: FullResult | null; inspect: InspectReport | null }
 export interface SerialPort { device: string; description: string }
+export type AlertEvent =
+  | { kind: 'stable'; fault_type: string; confidence: number; elapsed_s: number }
+  | { kind: 'clear'; elapsed_s: number }
+  | { kind: 'rule'; rule: string; elapsed_s: number };
 export interface TelemetryFrame {
   type: 'telemetry' | 'warning' | 'error' | 'mark_ack';
-  elapsed_s?: number; telemetry?: Record<string, number>; label?: string;
+  elapsed_s?: number; telemetry?: Record<string, number | null>; label?: string;
   confidence?: number; severities?: Record<string, number>; forecasts?: Record<string, number>;
   anomaly_score?: number; top_shap?: [string, number][]; degraded_pid_count?: number;
-  poll_hz?: number; message?: string;
+  missing_pids?: string[]; poll_hz?: number; t_poll?: number; message?: string;
+  alert_events?: AlertEvent[]; armed?: boolean;
 }
+export interface CalibrateProgress { type: 'calibrate_progress'; rows_collected: number; elapsed_s: number }
+export interface CalibrateResult { type: 'calibrate_result'; ok: boolean; n_windows?: number; path?: string; reason?: string }
+export type WsConnectPayload = {
+  action: 'connect'; port: string | null; car_id: number | null;
+  mode?: 'monitor' | 'calibrate'; allow_idle?: boolean;
+};
 
 // ── Core fetch helper ────────────────────────────────────────────────────────
 
