@@ -3,10 +3,10 @@
 Why this exists separately from forecast_dataset.py
 ---------------------------------------------------
 The legacy forecast dataset (`src/features/forecast_dataset.py`) targets
-the *severity scalar* computed by `src/features/severity.py` — which is
-the algebraic inverse of the injector's own coefficients (see project
-root README "Headline numbers"). That makes the forecaster a self-
-consistency floor, not a predictive model of physical reality.
+the *severity scalar* computed by `src/features/severity.py`.  The scales
+in severity.py are now sourced to external OBD-II diagnostic thresholds
+(not the injector's coefficients), but the forecaster still learns to
+predict a derived scalar rather than a raw physical signal.
 
 This dataset targets *raw next-window PID values*. The forecaster sees
 no fault labels at training time and no derived severity. It only learns

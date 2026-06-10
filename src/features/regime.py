@@ -11,12 +11,6 @@ By detecting the regime and one-hot encoding it as 5 extra features, the
 classifier and feature extractor can condition their judgments on context
 without us having to train a separate model per regime.
 
-Hysteresis thresholds
----------------------
-Regime boundaries use hysteresis bands (enter ≠ exit threshold) to prevent
-rapid oscillation at boundary coolant temperatures, e.g. a driver sitting
-at a red light right as the coolant crosses 70°C.
-
 Regimes (mutually exclusive, priority-ordered top-to-bottom)
 ------------------------------------------------------------
 cold_start  coolant < 55°C                     open-loop ECU, idle-up active
@@ -31,7 +25,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-# Coolant thresholds with hysteresis (enter_threshold, exit_threshold)
+# Coolant and speed thresholds (single-value, priority-ordered)
 _COLD_START_MAX = 55.0   # °C — above this, regime moves out of cold_start
 _WARMUP_MAX = 75.0       # °C — above this, regime moves out of warmup
 _IDLE_SPEED_MAX = 3.0    # km/h — below this (and warm) = idle

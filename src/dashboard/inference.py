@@ -388,15 +388,14 @@ class InferenceEngine:
     def set_sample_hz(self, hz: float) -> None:
         """Update the ECU poll rate used by rate-dependent features.
 
-        Call once per live tick (before update()) so COOLANT_WARMUP_RATE and
-        FUEL_LOOP_ACTIVE stay calibrated as the adapter's measured throughput
-        changes.  No-op for CSV replay (default 1.0 Hz is correct for carOBD).
+        After T3.1 the resampler normalises all rows to 1 Hz before they
+        reach this engine, so live callers always pass 1.0.  This method is
+        kept for compatibility and for possible future sub-1-Hz adapters.
 
         ``hz < 0.1`` means the adapter has not completed its first tick yet
-        (``measured_poll_hz`` returns 0.0 on the first connect).  Treat this
-        as "not yet known" and keep the previous value (1.0 default) rather
-        than clipping to 0.05 Hz and producing wildly wrong time-axis features
-        on the very first window.
+        (``measured_poll_hz`` returns 0.0 on the first connect).  Keep the
+        previous value (1.0 default) rather than producing wrong time-axis
+        features on the very first window.
         """
         if hz < 0.1:
             return  # adapter has not completed a tick yet — keep previous value

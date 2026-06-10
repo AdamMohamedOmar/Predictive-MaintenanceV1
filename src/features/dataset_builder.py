@@ -228,6 +228,7 @@ def build_dataset(
     _save_metadata(
         output_dir, dataset, usable_files, random_seed, noise_std,
         onset_fraction, ramp_fraction, magnitudes or _DEFAULT_MAGNITUDE, output_name,
+        magnitude_jitter=magnitude_jitter,
     )
 
     return dataset
@@ -243,6 +244,7 @@ def _save_metadata(
     ramp_fraction: float,
     magnitudes: dict[str, float],
     output_name: str,
+    magnitude_jitter: "tuple[float, float] | None" = None,
 ) -> None:
     class_counts = dataset.groupby("label")["label"].count().to_dict()
     meta = {
@@ -258,6 +260,7 @@ def _save_metadata(
             "ramp_fraction": ramp_fraction,
             "noise_std": noise_std,
             "magnitudes": magnitudes,
+            "magnitude_jitter": list(magnitude_jitter) if magnitude_jitter else None,
         },
         "random_seed": random_seed,
     }
