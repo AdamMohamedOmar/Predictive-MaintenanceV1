@@ -36,6 +36,20 @@ from src.data_loading import load_carobd_csv
 
 log = logging.getLogger(__name__)
 
+# Labels that are NOT fault detections — mirrors StableAlerter._NON_FAULT_LABELS.
+# cold_start is a normal regime; warming_up is the pre-buffer placeholder.
+_NON_FAULT_LABELS: frozenset[str] = frozenset({"healthy", "cold_start", "warming_up"})
+
+
+def _summarise_labels(label_counts: dict[str, int], n_windows: int) -> dict:
+    fault_count = sum(c for lbl, c in label_counts.items() if lbl not in _NON_FAULT_LABELS)
+    return {
+        "fault_window_count": fault_count,
+        "non_fault_window_count": n_windows - fault_count,
+        "fault_fraction": (fault_count / n_windows) if n_windows else 0.0,
+        "label_counts": label_counts,
+    }
+
 
 def _read_csv(path: Path) -> pd.DataFrame:
     """Load a CSV in either raw carOBD format or clean-column format.
@@ -155,18 +169,13 @@ def evaluate_real_fault(
     label_counts: dict[str, int] = {}
     for w in windows:
         label_counts[w["label"]] = label_counts.get(w["label"], 0) + 1
-    fault_count = sum(c for lbl, c in label_counts.items() if lbl != "healthy")
 
     return {
         "csv_path": str(csv_path),
         "n_rows": len(rows),
         "n_windows": len(windows),
         "windows": windows,
-        "summary": {
-            "fault_window_count": fault_count,
-            "fault_fraction": (fault_count / len(windows)) if windows else 0.0,
-            "label_counts": label_counts,
-        },
+        "summary": _summarise_labels(label_counts, len(windows)),
     }
 
 

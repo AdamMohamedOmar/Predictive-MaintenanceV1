@@ -32,6 +32,16 @@ import pytest
 from src.config import MODELS_DIR
 from src.eval.real_fault_eval import _read_csv, evaluate_real_fault
 
+
+def test_fault_fraction_excludes_cold_start():
+    from src.eval.real_fault_eval import _summarise_labels
+
+    label_counts = {"healthy": 5, "cold_start": 3, "air_system": 2}
+    summary = _summarise_labels(label_counts, n_windows=10)
+    assert summary["fault_window_count"] == 2
+    assert summary["fault_fraction"] == pytest.approx(0.2)
+    assert summary["non_fault_window_count"] == 8
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MOCK_CSV = _REPO_ROOT / "data" / "real_faults" / "mock" / "mock_lean_fault.csv"
 _RAW_DRIVE1 = _REPO_ROOT / "data" / "raw" / "carOBD" / "drive1.csv"
