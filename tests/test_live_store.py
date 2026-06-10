@@ -39,3 +39,14 @@ def test_marks_written_immediately_with_elapsed(tmp_path):
     assert [m["state"] for m in marks] == ["start", "stop"]
     assert [m["elapsed_s"] for m in marks] == [42, 99]
     store.close()
+
+
+def test_alerts_written_immediately(tmp_path):
+    store = LiveSessionStore(tmp_path / "s1")
+    store.record_alert({"kind": "stable", "fault_type": "fuel_system",
+                        "confidence": 0.91, "elapsed_s": 130})
+    store.record_alert({"kind": "rule", "rule": "ect_sensor_frozen", "elapsed_s": 95})
+    data = json.loads((tmp_path / "s1" / "alerts.json").read_text())
+    assert len(data) == 2
+    assert data[0]["fault_type"] == "fuel_system"
+    store.close()

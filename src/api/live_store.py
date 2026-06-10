@@ -22,6 +22,7 @@ class LiveSessionStore:
         self.session_dir = Path(session_dir)
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._marks: list[dict] = []
+        self._alerts: list[dict] = []
         self._last_elapsed: int = -1
         self._rows_f = open(
             self.session_dir / "rows.csv", "w", newline="", encoding="utf-8"
@@ -52,8 +53,14 @@ class LiveSessionStore:
             json.dumps(self._marks, indent=2)
         )
 
+    def record_alert(self, event: dict) -> None:
+        self._alerts.append(dict(event))
+        (self.session_dir / "alerts.json").write_text(json.dumps(self._alerts, indent=2))
+
     def close(self) -> None:
         if not self._rows_f.closed:
             self._rows_f.close()
         if not (self.session_dir / "marks.json").exists():
             (self.session_dir / "marks.json").write_text("[]")
+        if not (self.session_dir / "alerts.json").exists():
+            (self.session_dir / "alerts.json").write_text("[]")

@@ -201,6 +201,9 @@ async def _run_session(ws: WebSocket) -> None:
     async def _poll() -> None:
         """Drain OBD rows, run inference, emit telemetry frames."""
         warned_slow = False
+        prev_stable_active = False
+        prev_stable_fault = ""
+        prev_rule_count = 0
         while not stop_event.is_set():
             row = obd_src.next_row()
             if row is None:
@@ -218,6 +221,31 @@ async def _run_session(ws: WebSocket) -> None:
 
             last_elapsed["s"] = state.elapsed_s
             store.append_row(elapsed_s=state.elapsed_s, row=row)
+
+            # Discrete alert events: stable-alert transitions + new rule alerts.
+            alert_events: list[dict] = []
+            sa = state.stable_alert
+            if sa.active and (not prev_stable_active or sa.fault_type != prev_stable_fault):
+                alert_events.append({
+                    "kind": "stable", "fault_type": sa.fault_type,
+                    "confidence": round(float(sa.confidence), 4),
+                    "elapsed_s": state.elapsed_s,
+                })
+            elif prev_stable_active and not sa.active:
+                alert_events.append({"kind": "clear", "elapsed_s": state.elapsed_s})
+            prev_stable_active, prev_stable_fault = sa.active, sa.fault_type
+
+            if len(state.rule_alerts) > prev_rule_count:
+                for ra in state.rule_alerts[prev_rule_count:]:
+                    alert_events.append({
+                        "kind": "rule",
+                        "rule": getattr(ra, "rule", str(ra)),
+                        "elapsed_s": state.elapsed_s,
+                    })
+                prev_rule_count = len(state.rule_alerts)
+
+            for ev in alert_events:
+                store.record_alert(ev)
 
             poll_hz = obd_src.measured_poll_hz
             degraded = len(obd_src.missing_pids)
@@ -240,6 +268,7 @@ async def _run_session(ws: WebSocket) -> None:
                 ],
                 "degraded_pid_count": degraded,
                 "poll_hz": round(poll_hz, 3),
+                "alert_events": alert_events,
             }
 
             try:
