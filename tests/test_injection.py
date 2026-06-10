@@ -374,6 +374,17 @@ def test_coolant_fault_adds_rich_bias():
 
 # ─── Integration with real data ──────────────────────────────────────────────
 
+def test_fuel_system_engine_load_unchanged():
+    """Calculated load is an airflow ratio; a clogged injector cuts fuel, not
+    air -> at fixed throttle the PID must not move."""
+    df = _make_session()
+    original_load = df["ENGINE_LOAD"].copy()
+    out = inject_fault(df, _params("fuel_system", noise_std=0.0))
+    pd.testing.assert_series_equal(
+        out["ENGINE_LOAD"], original_load, check_names=False
+    )
+
+
 @pytest.mark.skipif(not SAMPLE.exists(), reason="carOBD data not present")
 def test_inject_session_on_real_data_all_faults():
     """inject_session must run without error on drive1.csv for all 4 fault types."""

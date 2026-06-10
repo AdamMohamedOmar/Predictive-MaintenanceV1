@@ -384,14 +384,9 @@ def _inject_fuel_system(
     )
     # MAP deliberately unchanged (differentiator from air_system)
 
-    # ENGINE_LOAD: lean misfires mean less useful work per cycle — load drops
-    # slightly at full ramp (~1.5 % load reduction per % LTFT bias).
-    load_delta = ramp * magnitude_pct * 0.08  # ~1.4 % drop at full 18 % LTFT fault
-    df["ENGINE_LOAD"] = np.clip(
-        df["ENGINE_LOAD"].to_numpy(dtype=float) - load_delta,
-        0.0,
-        100.0,
-    )
+    # ENGINE_LOAD deliberately unchanged: the PID is normalised AIRFLOW, and a
+    # clogged injector cuts fuel, not air.  (A real driver compensating for
+    # lost torque would RAISE it — driver behaviour is outside replayed data.)
 
     # ENGINE_RPM: injector clog causes idle roughness — small low-frequency jitter
     # only at low RPM (< 1200 rpm) where cylinder-dropout effects are felt.
