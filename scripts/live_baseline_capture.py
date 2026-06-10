@@ -62,6 +62,7 @@ def process_captured_rows(
     vehicle_name: str = "unknown",
     supported_pids: Optional[list[str]] = None,
     poll_hz: float = 1.0,
+    allow_idle: bool = False,
 ) -> tuple[BaselineNormalizer, dict]:
     """Fit a BaselineNormalizer from a list of raw OBD sensor rows.
 
@@ -111,7 +112,9 @@ def process_captured_rows(
             )
 
     # ── Guard 2: mean vehicle speed ───────────────────────────────────────────
-    if "VEHICLE_SPEED" in df.columns:
+    # allow_idle bypasses this for idle-only real-engine sessions (e.g. a smoke
+    # test where mock-vs-real is the only concern, not throttle calibration).
+    if "VEHICLE_SPEED" in df.columns and not allow_idle:
         mean_speed = float(df["VEHICLE_SPEED"].dropna().mean())
         if mean_speed < _MIN_MEAN_SPEED:
             raise ValueError(

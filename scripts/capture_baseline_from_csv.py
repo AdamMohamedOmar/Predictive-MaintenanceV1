@@ -48,6 +48,7 @@ def capture_baseline_from_csv(
     csv_path: Path | str,
     vehicle_name: str = "vehicle",
     out_path: Path | str | None = None,
+    allow_idle: bool = False,
 ) -> Path:
     """Fit and save a BaselineNormalizer from a clean-column 1 Hz CSV.
 
@@ -84,6 +85,7 @@ def capture_baseline_from_csv(
         vehicle_name=vehicle_name,
         supported_pids=pid_cols,
         poll_hz=1.0,  # adapted CSVs are always 1 Hz after resampling
+        allow_idle=allow_idle,
     )
 
     if out_path is None:
@@ -123,6 +125,12 @@ def main() -> int:
         default=None,
         help="Output .pkl path. Default: models/<vehicle_slug>_normalizer.pkl",
     )
+    parser.add_argument(
+        "--allow-idle",
+        action="store_true",
+        default=False,
+        help="Skip the mean-speed guard. Use only for smoke tests / idle-only sessions.",
+    )
     args = parser.parse_args()
 
     try:
@@ -130,6 +138,7 @@ def main() -> int:
             csv_path=args.csv,
             vehicle_name=args.vehicle,
             out_path=args.out,
+            allow_idle=args.allow_idle,
         )
     except ValueError as exc:
         print(f"[FAIL] Guard check failed:\n  {exc}", file=sys.stderr)
