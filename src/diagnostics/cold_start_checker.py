@@ -139,12 +139,12 @@ class ColdStartChecker:
         speed : float     VEHICLE_SPEED in km/h
         voltage : float   CONTROL_MODULE_VOLTAGE in V (default 14.0 when absent)
         now : float or None
-            Wall-clock time from ``time.monotonic()``.  When provided, elapsed
-            seconds are derived from real time rather than row count.  Pass
-            ``now=time.monotonic()`` from live code so sub-1 Hz polling does
-            not compress the timer (at 0.3 Hz, row-counting makes "90 s of
-            frozen ECT" fire after only 30 real seconds).  Omit in tests and
-            CSV replay — the legacy ``_elapsed_s += 1`` fallback is used.
+            Optional wall-clock time from ``time.monotonic()``.  Only pass this
+            when feeding rows at a non-1-Hz rate directly (bypassing the
+            InferenceEngine resampler).  All engine-fed paths — CSV replay at
+            any speed and resampled live rows — must omit it: one row equals
+            one data-second there, and wall-clock time would desynchronise the
+            duration rules from the data timeline.
 
         Returns
         -------

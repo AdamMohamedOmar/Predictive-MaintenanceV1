@@ -65,3 +65,38 @@ def test_reset_clears_session_start_time():
         assert not any(a.rule == "ect_sensor_frozen" for a in new), (
             "Session clock not reset — timer leaked across sessions"
         )
+
+
+def test_frozen_ect_fires_on_data_time_during_fast_replay():
+    """At 10x CSV replay 95 rows arrive in well under 90 wall-seconds.
+    The frozen-ECT rule is defined in DATA seconds (rows), so it must fire."""
+    from collections import deque
+
+    from src.config import WINDOW_LENGTH_S
+    from src.dashboard.inference import InferenceEngine, _initial_state
+    from src.diagnostics.cold_start_checker import ColdStartChecker
+    from src.models.stable_alerter import StableAlerter
+
+    eng = InferenceEngine.__new__(InferenceEngine)
+    eng._cold_start = ColdStartChecker()
+    eng._alerter = StableAlerter()
+    eng._buffer = deque(maxlen=WINDOW_LENGTH_S)
+    eng._rows_since_window = 0
+    eng._elapsed_s = 0
+    eng._last_state = _initial_state()
+    eng._nan_warned = set()
+    eng._sample_hz = 1.0
+    eng._next_sample_t = None
+    eng._run_window = lambda row, ready: eng._last_state  # ML path not under test
+
+    row = {
+        "COOLANT_TEMPERATURE": 50.0,  # cold AND perfectly flat -> stuck sensor
+        "ENGINE_RPM": 850.0,
+        "VEHICLE_SPEED": 0.0,
+        "CONTROL_MODULE_VOLTAGE": 14.1,
+    }
+    for _ in range(95):  # 95 data-seconds streamed as fast as Python loops
+        eng.update(dict(row))
+
+    fired_rules = {a.rule for a in eng._cold_start.alerts}
+    assert "ect_sensor_frozen" in fired_rules

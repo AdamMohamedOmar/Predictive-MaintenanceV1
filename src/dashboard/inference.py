@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import logging
 import math
-import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -324,12 +323,15 @@ class InferenceEngine:
         raw_rpm = row.get("ENGINE_RPM", 800.0)
         raw_speed = row.get("VEHICLE_SPEED", 0.0)
         raw_voltage = row.get("CONTROL_MODULE_VOLTAGE", 14.0)
+        # Row counting IS the time base: CSV rows are 1 Hz by construction and
+        # the T3.1 resampler guarantees 1 processed row per data-second on the
+        # live path.  Wall-clock `now` would desynchronise duration rules from
+        # data time at any replay speed != 1x.
         new_rule_alerts = self._cold_start.update(
             coolant=90.0 if math.isnan(raw_coolant) else raw_coolant,
             rpm=800.0 if math.isnan(raw_rpm) else raw_rpm,
             speed=0.0 if math.isnan(raw_speed) else raw_speed,
             voltage=14.0 if math.isnan(raw_voltage) else raw_voltage,
-            now=time.monotonic(),
         )
         for ra in new_rule_alerts:
             self._alerter.ingest_rule_alert(ra)
