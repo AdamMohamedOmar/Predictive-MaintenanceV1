@@ -52,14 +52,28 @@ def list_serial_ports() -> list[dict]:
     Returns an empty list when pyserial's list_ports finds nothing or when
     the call itself fails (e.g. on a machine with no serial subsystem).
     """
+    import os
+    ports: list[dict] = []
     try:
         from serial.tools.list_ports import comports  # pyserial==3.5
-        return [
+        ports = [
             {"device": p.device, "description": p.description or "Serial port"}
             for p in comports()
         ]
     except Exception:
-        return []
+        pass
+    if os.environ.get("PM_ALLOW_REPLAY") == "1":
+        # Relative paths: the API server always runs from the repo root
+        # (config.py has no demo-dir constant — generate_demo_data builds
+        # its own). Replay entries are invisible without the env flag.
+        ports += [
+            {"device": f"replay:{p}", "description": f"REPLAY (demo) — {p.name}"}
+            for p in sorted(Path("data/demo").glob("demo_*.csv"))
+        ]
+        ahmed = Path("data/real_faults/ahmed/ahmed_drive_20260602.csv")
+        if ahmed.exists():
+            ports.append({"device": f"replay:{ahmed}", "description": "REPLAY — Yaris healthy drive"})
+    return ports
 
 
 # ── 4.2  Live WebSocket ───────────────────────────────────────────────────────
@@ -141,10 +155,21 @@ async def _run_session(ws: WebSocket) -> None:
         await ws.send_json({"type": "error", "message": f"Model load failed: {exc}"})
         return
 
-    # ── Connect ELM327 (blocks up to 15 s) ────────────────────────────────────
+    # ── Connect OBD source (ELM327 or replay fallback) ───────────────────────
+    import os
     from src.live.obd_source import LiveObdSource
-    obd_src = LiveObdSource(port=port, sample_hz=1.0)
-    log.info("Live WS: connecting to ELM327 on port=%s…", port or "auto")
+    if port and port.startswith("replay:") and os.environ.get("PM_ALLOW_REPLAY") == "1":
+        from src.live.replay_source import ReplayObdSource
+        # PM_REPLAY_FAST=1 is test-only: drains rows without 1 Hz pacing so the
+        # bench/calibrate tests finish in seconds instead of minutes.
+        obd_src = ReplayObdSource(
+            csv_path=port[len("replay:"):],
+            realtime=os.environ.get("PM_REPLAY_FAST") != "1",
+        )
+        log.info("Live WS: REPLAY source — %s", obd_src.csv_path)
+    else:
+        obd_src = LiveObdSource(port=port, sample_hz=1.0)
+    log.info("Live WS: connecting to OBD source on port=%s…", port or "auto")
 
     connected = await asyncio.to_thread(obd_src.connect)
     if not connected:
