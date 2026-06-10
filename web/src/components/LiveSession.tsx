@@ -5,13 +5,13 @@ import StatusBanner from './StatusBanner';
 import SeverityGrid from './SeverityGrid';
 import AnomalyPanel from './AnomalyPanel';
 import ShapPanel from './ShapPanel';
-import PidStrip from './PidStrip';
+import SensorTimeline, { type TimelineAlert } from './SensorTimeline';
 
 interface Props { carId: number }
 
 type ConnState = 'disconnected' | 'connecting' | 'waiting' | 'live' | 'error';
 
-const HISTORY_LEN = 300;
+const HISTORY_LEN = 600;
 
 export default function LiveSession({ carId }: Props) {
   const [ports, setPorts] = useState<SerialPort[]>([]);
@@ -20,6 +20,7 @@ export default function LiveSession({ carId }: Props) {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [frame, setFrame] = useState<TelemetryFrame | null>(null);
   const [pidHistory, setPidHistory] = useState<Record<string, number>[]>([]);
+  const [alertEvents, setAlertEvents] = useState<TimelineAlert[]>([]);
   const [leakStart, setLeakStart] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -42,6 +43,11 @@ export default function LiveSession({ carId }: Props) {
             const next = [...prev, entry];
             return next.length > HISTORY_LEN ? next.slice(-HISTORY_LEN) : next;
           });
+          if (f.alert_events?.length) {
+            setAlertEvents(prev => [...prev,
+              ...f.alert_events!.filter(e => e.kind !== 'clear')
+                .map(e => ({ elapsed_s: e.elapsed_s, label: ('fault_type' in e ? e.fault_type : undefined) ?? ('rule' in e ? e.rule : undefined) ?? 'alert' }))]);
+          }
         } else if (f.type === 'warning' && f.message) {
           setWarnings(prev => [...prev, f.message!]);
         } else if (f.type === 'error') {
@@ -62,6 +68,7 @@ export default function LiveSession({ carId }: Props) {
     setConnState('disconnected');
     setFrame(null);
     setPidHistory([]);
+    setAlertEvents([]);
     setLeakStart(null);
   };
 
@@ -116,8 +123,21 @@ export default function LiveSession({ carId }: Props) {
         </div>
       )}
 
+      {/* Missing PID names */}
+      {!!frame?.missing_pids?.length && (
+        <div style={{ fontFamily: T.FONT_MONO, fontSize: 10, color: T.TEXT_MUTED, marginBottom: 8 }}>
+          ECU does not report: {frame.missing_pids.join(', ')}
+        </div>
+      )}
+
       {connState === 'live' && frame?.label && (
         <>
+          {frame.armed === false && (
+            <div style={{ fontFamily: T.FONT_MONO, fontSize: 11, color: T.ACCENT_WARN,
+                          border: `1px solid ${T.ACCENT_WARN}`, padding: '6px 10px', marginBottom: 8 }}>
+              MONITORING (UNCALIBRATED) — calibrate this car to arm fault alerts
+            </div>
+          )}
           <StatusBanner label={frame.label} confidence={frame.confidence ?? 0} anomalyScore={frame.anomaly_score ?? 0} />
 
           {/* Mark leak controls */}
@@ -133,7 +153,7 @@ export default function LiveSession({ carId }: Props) {
 
           <SeverityGrid severities={severities} forecasts={forecasts} />
           <AnomalyPanel score={frame.anomaly_score ?? 0} />
-          <PidStrip data={pidHistory as { elapsed_s: number; [k: string]: number }[]} />
+          <SensorTimeline rows={pidHistory} alerts={alertEvents} />
           <ShapPanel topShap={frame.top_shap} />
         </>
       )}
