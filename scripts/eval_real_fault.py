@@ -57,6 +57,20 @@ def main() -> int:
             "Required for a meaningful cross-vehicle score."
         ),
     )
+    parser.add_argument(
+        "--fault-from",
+        type=int,
+        default=None,
+        metavar="S",
+        help="Fault-interval start (seconds since recording start; mods-in mark).",
+    )
+    parser.add_argument(
+        "--fault-to",
+        type=int,
+        default=None,
+        metavar="S",
+        help="Fault-interval end (seconds since recording start; mods-out mark).",
+    )
     args = parser.parse_args()
 
     csv_path = Path(args.csv)
@@ -75,8 +89,24 @@ def main() -> int:
         engine_kwargs["engine"] = InferenceEngine(normalizer_override=norm_path)
         log.info("Using normalizer override: %s", norm_path)
 
+    if (args.fault_from is None) != (args.fault_to is None):
+        log.error("--fault-from and --fault-to must be given together.")
+        return 1
+
     log.info("Evaluating %s …", csv_path)
     result = evaluate_real_fault(csv_path, **engine_kwargs)
+
+    if args.fault_from is not None:
+        from src.eval.real_fault_eval import compute_fault_recall
+
+        recall_block = compute_fault_recall(
+            result["windows"], args.fault_from, args.fault_to
+        )
+        result["fault_interval"] = {
+            "from_s": args.fault_from,
+            "to_s": args.fault_to,
+            **recall_block,
+        }
 
     out_path = (
         Path(args.out)
@@ -95,6 +125,14 @@ def main() -> int:
         summary["fault_fraction"] * 100.0,
     )
     log.info("  Label counts: %s", summary["label_counts"])
+    if "fault_interval" in result:
+        fi = result["fault_interval"]
+        log.info(
+            "  §10 vacuum-leak recall: %.3f  (%d/%d windows; by-label %d, anomaly-only %d)",
+            fi["recall"], fi["n_detected"], fi["n_fault_windows"],
+            fi["detected_by_label"], fi["detected_by_anomaly_only"],
+        )
+        log.info("  Pass criterion: recall >= 0.60 (REAL_FAULT_COLLECTION.md §10)")
     log.info("  Written: %s", out_path)
     return 0
 
