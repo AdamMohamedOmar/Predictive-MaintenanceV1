@@ -168,3 +168,62 @@ def evaluate_real_fault(
             "label_counts": label_counts,
         },
     }
+
+
+# §10 headline metric (docs/REAL_FAULT_COLLECTION.md): a vacuum leak may present
+# through the trim route (fuel_system) or the mechanical route (air_system) —
+# both count.  cold_start / coolant / TPS labels do NOT detect a vacuum leak.
+_VACUUM_LEAK_DETECTION_LABELS: frozenset[str] = frozenset({"fuel_system", "air_system"})
+_ANOMALY_DETECTION_THRESHOLD = 0.85
+
+
+def compute_fault_recall(
+    windows: list[dict],
+    fault_from_s: int,
+    fault_to_s: int,
+    *,
+    detection_labels: frozenset[str] = _VACUUM_LEAK_DETECTION_LABELS,
+    anomaly_threshold: float = _ANOMALY_DETECTION_THRESHOLD,
+) -> dict:
+    """Vacuum-leak recall over the fault interval, exactly as defined in §10.
+
+    Parameters
+    ----------
+    windows : list of dict
+        Per-stride window records from ``evaluate_real_fault`` (each must
+        carry ``elapsed_s``, ``label``, ``anomaly_score``).
+    fault_from_s, fault_to_s : int
+        Fault interval (mods-in / mods-out timestamps), seconds since start.
+    detection_labels : frozenset
+        Labels that constitute a detection.  Default = §10's set.
+    anomaly_threshold : float
+        Anomaly-route OR-branch threshold.  Default = §10's 0.85.
+
+    Returns
+    -------
+    dict with recall, n_fault_windows, n_detected, detected_by_label,
+    detected_by_anomaly_only.
+    """
+    in_interval = [w for w in windows if fault_from_s <= w["elapsed_s"] <= fault_to_s]
+    if not in_interval:
+        return {
+            "recall": 0.0,
+            "n_fault_windows": 0,
+            "n_detected": 0,
+            "detected_by_label": 0,
+            "detected_by_anomaly_only": 0,
+        }
+    by_label = sum(1 for w in in_interval if w["label"] in detection_labels)
+    detected = sum(
+        1
+        for w in in_interval
+        if w["label"] in detection_labels
+        or float(w.get("anomaly_score", 0.0)) >= anomaly_threshold
+    )
+    return {
+        "recall": detected / len(in_interval),
+        "n_fault_windows": len(in_interval),
+        "n_detected": detected,
+        "detected_by_label": by_label,
+        "detected_by_anomaly_only": detected - by_label,
+    }
