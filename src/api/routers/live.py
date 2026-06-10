@@ -244,12 +244,37 @@ async def _run_session(ws: WebSocket) -> None:
         prev_stable_active = False
         prev_stable_fault = ""
         prev_rule_count = 0
+        no_data_s = 0.0
+        reconnect_tried = False
         while not stop_event.is_set():
             row = obd_src.next_row()
             if row is None:
+                no_data_s += 0.05
+                if no_data_s > 10.0 and not reconnect_tried:
+                    reconnect_tried = True
+                    await ws.send_json({"type": "warning",
+                                        "message": "No data for 10 s — attempting one reconnect…"})
+                    await asyncio.to_thread(obd_src.stop)
+                    ok = await asyncio.to_thread(obd_src.connect)
+                    if ok:
+                        obd_src.start()
+                        no_data_s = 0.0
+                        await ws.send_json({"type": "warning", "message": "Reconnected."})
+                    else:
+                        await ws.send_json({"type": "error",
+                                            "message": "Adapter unresponsive — session ended. "
+                                                       "Check ignition and USB, then reconnect."})
+                        stop_event.set()
+                        break
+                elif no_data_s > 20.0:
+                    await ws.send_json({"type": "error",
+                                        "message": "No data after reconnect — session ended."})
+                    stop_event.set()
+                    break
                 await asyncio.sleep(0.05)
                 continue
 
+            no_data_s = 0.0
             # XGBoost + SHAP are CPU-bound — run in the default thread executor
             # so the event loop stays responsive to incoming actions.
             try:
@@ -310,6 +335,7 @@ async def _run_session(ws: WebSocket) -> None:
                     if not _is_nan(v)
                 ],
                 "degraded_pid_count": degraded,
+                "missing_pids": list(obd_src.missing_pids),
                 "poll_hz": round(poll_hz, 3),
                 "alert_events": alert_events,
                 "armed": armed,
