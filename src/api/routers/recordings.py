@@ -24,17 +24,6 @@ def _car_dir(user_id: int, car_id: int) -> Path:
     return DATA_APP_DIR / "users" / str(user_id) / "cars" / str(car_id)
 
 
-def _compute_recall(windows: list[dict], fault_from_s: int, fault_to_s: int) -> float:
-    """Fraction of windows in the fault interval labelled non-healthy."""
-    fault_windows = [
-        w for w in windows
-        if fault_from_s <= w["elapsed_s"] <= fault_to_s
-    ]
-    if not fault_windows:
-        return 0.0
-    detected = sum(1 for w in fault_windows if w["label"] != "healthy")
-    return detected / len(fault_windows)
-
 
 @router.post(
     "/cars/{car_id}/recordings",
@@ -109,8 +98,12 @@ async def upload_recording(
         anomaly_mean = sum(w.get("anomaly_score", 0.0) for w in windows) / len(windows)
 
     recall = None
+    recall_detail = None
     if fault_from_s is not None and fault_to_s is not None:
-        recall = _compute_recall(windows, fault_from_s, fault_to_s)
+        from src.eval.real_fault_eval import compute_fault_recall
+
+        recall_detail = compute_fault_recall(windows, fault_from_s, fault_to_s)
+        recall = recall_detail["recall"]
 
     rec = Recording(
         car_id=car.id,
