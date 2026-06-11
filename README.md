@@ -15,20 +15,55 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the 8-week execution plan.
 
 ---
 
-## Headline numbers — what they actually measure
+## Headline numbers — what they actually measure (model freeze 13 June 2026)
 
-The classifier's **corrected-physics** synthetic scores (the git history shows the 0.965 → 0.80 drop when the speed-density air physics, the STFT→LTFT handoff, and the severity decoupling landed — the over-claim correcting itself):
+All numbers sourced directly from `results/` JSON files — never from memory.
 
-- **Fixed-holdout (drive1 + live12) macro-F1 = 0.80** — `results/xgb_classifier_v1_results.json`. Per-class: coolant 0.998, throttle 0.76, air 0.71, healthy 0.76, fuel 0.56, cold_start 1.0. (Fuel is hardest: the STFT→LTFT handoff plus mild jittered severities make developing fuel faults genuinely subtle.)
-- **LOSO mean = 0.85** with a large spread (σ ≈ 0.17): the near-duplicate commute sessions (live5–live9) score ≈ 0.98 while the structurally-different trips score far lower. The honest hard case is **live12 = 0.53** (`results/loso_cv_results.json`, `min_f1`). We headline 0.53, not the mean.
+### Classifier (`results/xgb_classifier_v1_results.json`)
 
-These are still **synthetic** — faults are injected by `src/injection/fault_injector.py` — but they are no longer circular: severity is anchored to external diagnostic thresholds, not the injector's own coefficients (P0-2), and a withheld-coefficient evaluation (`scripts/eval_withheld_coeff.py`, `results/withheld_coeff_results.json`) measures transfer to a *different* generator configuration (gap ≈ 0.03). Read them as a synthetic baseline, not real-fault detection.
+**Fixed-holdout (drive1 + live12) macro-F1 = 0.8006** — per-class F1:
+
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| healthy | 0.824 | 0.717 | 0.767 |
+| air_system | 0.682 | 0.749 | 0.714 |
+| fuel_system | 0.462 | 0.736 | 0.567 |
+| coolant_temp_sensor | 1.000 | 0.985 | 0.993 |
+| throttle_position_sensor | 1.000 | 0.617 | 0.763 |
+| cold_start | 1.000 | 1.000 | 1.000 |
+
+Fuel is hardest: the STFT→LTFT handoff plus mild jittered severities make developing fuel faults genuinely subtle. Precision = 0.46 is a structural floor; sample-weight tuning (Task 16) moved macro-F1 from 0.797 to 0.801 without meaningfully improving fuel precision.
+
+**Known limitation:** on the healthy Yaris idle drive (Ahmed's 2 June session), the fuel_system cluster at elapsed 280–330 s fires 9 stable alerts. Healthy fraction = 84.4% (passes ≥ 70% threshold); the stable-alert count does not pass zero. This is a calibration gap, not a classifier regression — per-vehicle baseline calibration (the car page CALIBRATE flow) is the recommended mitigation.
+
+**LOSO mean = 0.85** with large spread (σ ≈ 0.17): near-duplicate commute sessions score ≈ 0.98; structurally-different trips score lower. Honest hard case **live12 = 0.53** (`results/loso_cv_results.json`). We headline 0.53, not the mean.
+
+These are still **synthetic** — faults are injected by `src/injection/fault_injector.py` — severity anchored to external diagnostic thresholds, withheld-coefficient evaluation gap ≈ 0.03 (`results/withheld_coeff_results.json`). Read as a synthetic baseline, not real-fault detection.
+
+### Real-fault recall (`results/real_fault_eval/`)
+
+**§10 vacuum-leak recall = 0.966** (28/29 windows, `mock_lean_fault_v1.json`). Pass criterion ≥ 0.60.
+
+Yaris healthy drive (fit-on-self calibration): healthy fraction 0.844 with 9 residual fuel_system stable alerts (structural floor; see above).
+
+### Forecasters (`results/forecaster_v1_results.json`)
+
+| Fault | MAE % of range | Target | Status |
+|---|---|---|---|
+| coolant_temp_sensor | 0.7% | ≤ 15% | ✓ |
+| throttle_position_sensor | 6.3% | ≤ 35% | ✓ |
+| fuel_system | 12.4% | ≤ 15% | ✓ |
+| air_system | 19.2% | ≤ 15% | ✗ structural floor |
+
+Air_system misses: idle-gate applied (ENGINE_LOAD ≤ 40%), but MAP anomaly at idle is small (~3–5 kPa) and ECU self-compensates via fuel trim, leaving a low-SNR severity signal. 19% is the honest structural limit for this dataset.
+
+### Latency (`results/latency_v1.json`)
+
+Server-side poll→WS-send: **p95 = 4.61 ms** (n = 3, bench run; browser adds network + render on localhost).
 
 Forecasting + anomaly (honest, mixed):
-- **PID forecaster** (delta target, P1-3) beats a persistence baseline on MAP, coolant, and throttle-to-pedal ratio; **LTFT does not** — its 60-second change is near-zero noise, so "predict no change" is near-optimal. Reported as explored-did-not-beat-baseline for LTFT.
-- **Anomaly detector** AUC 0.69 (95% CI [0.66, 0.72]). Its 1% false-alarm budget holds within-distribution but inflates to ~16% on held-out sessions — a quantified cross-session-shift limitation (charter R12), addressed by per-vehicle baseline re-fit.
-
-Real-fault detection is validated separately against induced-fault recordings collected per `docs/REAL_FAULT_COLLECTION.md` and scored by `src/eval/real_fault_eval.py`. The paper's headline real-fault metric is **vacuum-leak recall ≥ 0.60**.
+- **PID forecaster** (delta target, P1-3) beats a persistence baseline on MAP, coolant, and throttle-to-pedal ratio; **LTFT does not** — its 60-second change is near-zero noise.
+- **Anomaly detector** AUC 0.69 (95% CI [0.66, 0.72]). 1% false-alarm budget holds within-distribution; inflates to ~16% on held-out sessions — addressed by per-vehicle baseline re-fit.
 
 ---
 
@@ -132,8 +167,8 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 | 4 | XGBoost classifier (corrected-physics: 0.80 fixed-holdout, 0.53 worst LOSO fold), SHAP explainer | ✅ Complete |
 | 5 | FaultForecaster (4× XGBRegressor, 60 s horizon) | ✅ Complete |
 | 6 | Streamlit dashboard, live ELM327 integration, cross-vehicle baseline | ✅ Complete |
-| 7 | Live Skoda validation, polish | 🔄 In progress |
-| 8 | Thesis write-up, final demo | 📅 Scheduled |
+| 7 | Live Skoda validation, polish, defense sprint (WS calibrate, SensorTimeline, replay fallback) | ✅ Complete (model freeze 13 June) |
+| 8 | Defense 15 June, thesis write-up | 🔄 In progress |
 
 ---
 
