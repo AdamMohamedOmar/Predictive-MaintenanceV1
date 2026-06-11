@@ -45,7 +45,10 @@
       "coolant_temp_sensor": 42.0,
       "throttle_position_sensor": 1.35
     },
-    "magnitude_jitter": [0.6, 1.4]
+    "magnitude_jitter": [
+      0.6,
+      1.4
+    ]
   },
   "random_seed": 42
 }

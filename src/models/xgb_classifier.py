@@ -38,6 +38,10 @@ from src.models.classifier import ALL_LABELS
 
 log = logging.getLogger(__name__)
 
+# fuel_system over-fires (precision 0.457 at plan time): down-weight its
+# samples so the decision boundary retreats toward higher-confidence windows.
+_FUEL_WEIGHT = 0.5
+
 
 def train(
     train_df: pd.DataFrame,
@@ -70,8 +74,10 @@ def train(
     X = train_norm[feat_cols].to_numpy(dtype=float)
     y = train_norm["label_id"].to_numpy(dtype=int)
 
-    # sample_weight mirrors class_weight='balanced' from sklearn
-    sample_weights = compute_sample_weight("balanced", y)
+    # fuel_system down-weighted (all others at 1.0) to pull its decision
+    # boundary back from healthy/air/TPS regions (precision=0.457 black hole).
+    fuel_id = LABEL_TO_ID["fuel_system"]
+    sample_weights = np.where(y == fuel_id, _FUEL_WEIGHT, 1.0)
 
     clf = xgb.XGBClassifier(
         n_estimators=n_estimators,
