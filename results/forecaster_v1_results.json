@@ -1,14 +1,14 @@
 {
   "air_system": {
     "fault_type": "air_system",
-    "mae": 0.18593838686421185,
-    "mae_pct_of_range": 18.593838686421186,
+    "mae": 0.1915976655954708,
+    "mae_pct_of_range": 19.15976655954708,
     "meets_commit_target": false,
     "meets_stretch_target": false,
-    "n_train": 797,
-    "n_test": 209,
-    "severity_target_mean": 0.15105110024671137,
-    "severity_target_std": 0.24357924151052354
+    "n_train": 585,
+    "n_test": 167,
+    "severity_target_mean": 0.1836707265006707,
+    "severity_target_std": 0.25819422373360157
   },
   "fuel_system": {
     "fault_type": "fuel_system",
