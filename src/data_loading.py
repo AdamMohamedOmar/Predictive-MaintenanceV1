@@ -98,6 +98,13 @@ def load_carobd_csv(
 
     df = df.rename(columns=_RENAME_MAP)
 
+    # Coerce all sensor columns to numeric. Every carOBD column is a numeric
+    # sensor reading, but a few files carry a stray non-numeric cell (e.g. a lone
+    # ' ' in INTAKE_AIR_TEMPERATURE in live16) that would otherwise make the whole
+    # column object-typed and silently break describe()/skew()/feature extraction.
+    # errors="coerce" turns those isolated cells into NaN, handled like any gap.
+    df = df.apply(pd.to_numeric, errors="coerce")
+
     # Guard against silent column misalignment. A name-based schema check cannot
     # catch a value shift (the column NAMES stay valid), so assert that the
     # signature PIDs sit inside physically possible ranges. A misaligned file
