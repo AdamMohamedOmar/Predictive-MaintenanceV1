@@ -67,7 +67,6 @@ from src.dashboard.theme import (
     FONT_DISPLAY,
     FONT_BODY,
     FONT_MONO,
-    severity_color,
     state_accent,
 )
 from src.live.obd_source import LiveObdSource
@@ -615,171 +614,6 @@ def _render_status_banner(state: DashboardState) -> None:
     st.markdown(banner_html, unsafe_allow_html=True)
 
 
-def _render_severity_grid(state: DashboardState) -> None:
-    """Four plotly angular gauges — current severity + 60-second forecast threshold.
-
-    The cyan threshold line on each gauge shows WHERE we expect severity to be
-    in 60 seconds, so the driver reads "needle position = now, cyan line = soon".
-    """
-    import plotly.graph_objects as go
-
-    cols = st.columns(4)
-    for col, fault in zip(cols, FAULT_TYPES):
-        sev = state.severities.get(fault, 0.0)
-        fc = state.forecasts.get(fault, 0.0)
-        display = _FAULT_DISPLAY.get(fault, fault)
-
-        sev_pct = round(sev * 100, 1)
-        fc_pct = round(fc * 100, 1)
-        bar_col = severity_color(sev)
-
-        # Delta symbol for caption
-        if fc > sev + 0.02:
-            delta_sym, delta_col = "▲", ACCENT_ALERT
-        elif fc < sev - 0.02:
-            delta_sym, delta_col = "▼", ACCENT_OK
-        else:
-            delta_sym, delta_col = "—", TEXT_MUTED
-
-        fig = go.Figure(
-            go.Indicator(
-                mode="gauge+number",
-                value=sev_pct,
-                number={
-                    "suffix": "%",
-                    "font": {"family": FONT_MONO, "size": 26, "color": TEXT_PRIMARY},
-                },
-                gauge={
-                    "shape": "angular",
-                    "axis": {
-                        "range": [0, 100],
-                        "tickwidth": 0,
-                        "tickcolor": BORDER,
-                        "tickfont": {
-                            "color": TEXT_MUTED,
-                            "size": 8,
-                            "family": FONT_MONO,
-                        },
-                        "nticks": 6,
-                    },
-                    "bar": {"color": bar_col, "thickness": 0.26},
-                    "bgcolor": BG_RAISED,
-                    "borderwidth": 0,
-                    "steps": [
-                        {"range": [0, 30],   "color": _hex_with_alpha(ACCENT_OK,    0.094)},
-                        {"range": [30, 60],  "color": _hex_with_alpha(ACCENT_WARN,  0.094)},
-                        {"range": [60, 100], "color": _hex_with_alpha(ACCENT_ALERT, 0.094)},
-                    ],
-                    # Forecast marker — cyan needle shows where we'll be in 60 s
-                    "threshold": {
-                        "line": {"color": ACCENT_DATA, "width": 3},
-                        "thickness": 0.82,
-                        "value": fc_pct,
-                    },
-                },
-            )
-        )
-        fig.update_layout(
-            paper_bgcolor=BG_SURFACE,
-            plot_bgcolor=BG_SURFACE,
-            font={"color": TEXT_PRIMARY, "family": FONT_MONO},
-            margin={"l": 16, "r": 16, "t": 32, "b": 0},
-            height=190,
-        )
-
-        with col:
-            # Fault name heading
-            st.markdown(
-                f'<div style="font-family:{FONT_DISPLAY};font-size:11px;'
-                f"text-transform:uppercase;letter-spacing:0.1em;"
-                f'color:{TEXT_SECONDARY};text-align:center;margin-bottom:4px;">'
-                f"{display}</div>",
-                unsafe_allow_html=True,
-            )
-            st.plotly_chart(
-                fig, use_container_width=True, config={"displayModeBar": False}
-            )
-            # Caption: now · forecast
-            st.markdown(
-                f'<div style="font-family:{FONT_MONO};font-size:11px;'
-                f'text-align:center;color:{TEXT_MUTED};margin-top:-12px;">'
-                f'NOW <b style="color:{bar_col}">{sev_pct:.0f}%</b>'
-                f"&nbsp;&nbsp;+60s "
-                f'<b style="color:{delta_col}">{fc_pct:.0f}% {delta_sym}</b>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-
-def _render_anomaly_panel(state: DashboardState) -> None:
-    """One-class IsolationForest score, complementing the classifier.
-
-    The classifier asks "which of the 5 known faults?"; this detector asks
-    "does this window look like healthy data?" The two are independent —
-    a high anomaly score with a "healthy" classifier label means the engine
-    is doing something the training data didn't cover.
-
-    Renders a single horizontal-bar gauge. The gauge is intentionally
-    visually distinct from the severity gauges (horizontal vs angular)
-    so a viewer doesn't confuse them.
-    """
-    import plotly.graph_objects as go
-
-    score = float(state.anomaly_score)
-    if score <= 0.0:
-        # Either model not loaded or warming up — show placeholder text
-        # rather than a deceptive "0.00" reading.
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// anomaly detector inactive — model not loaded or warming up</div>",
-            unsafe_allow_html=True,
-        )
-        return
-
-    bar_col = severity_color(score)
-    pct = round(score * 100.0, 1)
-
-    fig = go.Figure(
-        go.Bar(
-            x=[pct],
-            y=[""],
-            orientation="h",
-            marker={"color": bar_col},
-            text=[f"{pct:.1f}%"],
-            textposition="outside",
-            textfont={"family": FONT_MONO, "size": 12, "color": TEXT_PRIMARY},
-            cliponaxis=False,
-        )
-    )
-    fig.update_xaxes(
-        range=[0, 100],
-        showgrid=False,
-        zeroline=False,
-        tickfont={"family": FONT_MONO, "size": 9, "color": TEXT_MUTED},
-        ticksuffix="%",
-    )
-    fig.update_yaxes(visible=False, showgrid=False)
-    fig.update_layout(
-        paper_bgcolor=BG_SURFACE,
-        plot_bgcolor=BG_SURFACE,
-        margin={"l": 0, "r": 50, "t": 8, "b": 8},
-        height=60,
-        showlegend=False,
-    )
-
-    with st.container(border=True):
-        st.markdown(
-            f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
-            f"text-transform:uppercase;letter-spacing:0.1em;"
-            f'color:{TEXT_SECONDARY};margin-bottom:4px;">'
-            f"OUT-OF-DISTRIBUTION SCORE&nbsp;·&nbsp;"
-            f'<span style="color:{TEXT_MUTED};">independent of classifier label</span>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
 
 def _render_pid_strip(history: deque) -> None:
     """2×2 grid of dark sparkline cards — each shows a large live value + rolling plot.
@@ -829,6 +663,8 @@ def _render_pid_strip(history: deque) -> None:
             val_str = f"{int(current_val):,}"
         else:
             val_str = f"{current_val:.1f}"
+        # Hover number format mirrors the displayed value (RPM integer, else 1dp).
+        val_fmt = ",.0f" if pid == "ENGINE_RPM" else ".1f"
 
         # Sparkline — no axes, no labels, just the signal shape
         fig = go.Figure(
@@ -838,6 +674,7 @@ def _render_pid_strip(history: deque) -> None:
                 line={"color": line_color, "width": 1.8},
                 fill="tozeroy",
                 fillcolor=_hex_with_alpha(line_color, 0.094),
+                hovertemplate=f"{label}: %{{y:{val_fmt}}} {unit}<extra></extra>",
             )
         )
         fig.update_xaxes(visible=False, showgrid=False)
@@ -1239,12 +1076,6 @@ def main() -> None:
             st.info("Select a session file in the sidebar and press **Play** to begin.")
     else:
         _render_status_banner(state)
-
-        _section_header("Fault Severity · 60-Second Forecast")
-        _render_severity_grid(state)
-
-        _section_header("Anomaly Score · One-Class Detector")
-        _render_anomaly_panel(state)
 
         _section_header("Live PID Readings")
         _render_pid_strip(st.session_state.pid_history)
