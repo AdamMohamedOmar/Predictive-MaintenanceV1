@@ -76,20 +76,41 @@ def test_session_id_attached():
     assert df.attrs["session_id"] == "drive1"
 
 
-def test_list_usable_files_returns_known_set():
-    """The usable-files helper must return exactly the 9 audited-clean files."""
-    from src.data_loading import list_usable_files, USABLE_CAROBD_FILES
+def test_list_usable_files_returns_all_bounds_valid_files():
+    """After the trailing-comma parse fix, every carOBD file aligns and passes
+    the physical-bounds guard, so list_usable_files returns the full set — not a
+    hardcoded 9-file whitelist. This test guards against a regression of the
+    column-shift bug (which would make files fail the guard and drop out)."""
+    from src.data_loading import list_usable_files, load_carobd_csv
 
     data_dir = REPO_ROOT / "data" / "raw" / "carOBD"
     if not data_dir.exists():
         pytest.skip("carOBD data not present")
 
+    all_csvs = {p.name for p in data_dir.glob("*.csv")}
     found = {p.name for p in list_usable_files(data_dir)}
-    expected = set(USABLE_CAROBD_FILES)
-    # If new files appear in the data dir, this test won't fail wrongly:
-    assert found == expected, (
-        f"Mismatch: missing={expected - found}, extra={found - expected}"
-    )
+    # No file should be silently dropped as "unusable" any more.
+    assert found == all_csvs, f"Files unexpectedly rejected: {all_csvs - found}"
+
+    # And every returned file must actually load and pass the bounds guard.
+    for p in list_usable_files(data_dir):
+        load_carobd_csv(p)  # raises if misaligned / out of bounds
+
+
+def test_trailing_comma_file_is_not_column_shifted(tmp_path):
+    """Regression test for the column-shift bug: a carOBD-schema CSV whose rows
+    carry a trailing comma must still load with COLUMNS ALIGNED, i.e. coolant
+    reads as coolant (not a shifted neighbour) and timing stays in bounds."""
+    coolant = [40.0, 70.0, 90.0]
+    p = _make_minimal_csv(tmp_path, coolant)
+    # Re-write the file with a trailing comma on every data row (the carOBD quirk).
+    text = p.read_text().splitlines()
+    header, *rows = text
+    p.write_text("\n".join([header] + [r + "," for r in rows]) + "\n")
+
+    df = load_carobd_csv(p)
+    assert list(df["COOLANT_TEMPERATURE"]) == coolant  # aligned, not shifted
+    assert df["TIMING_ADVANCE"].between(-64, 64).all()  # in bounds, not catalyst temps
 
 
 def test_loader_keeps_cold_start_rows(tmp_path):
