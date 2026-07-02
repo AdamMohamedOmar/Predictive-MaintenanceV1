@@ -32,7 +32,10 @@ class ReplayObdSource:
     def connect(self, timeout: float = 0.0) -> bool:
         if not self.csv_path.exists():
             return False
-        df = pd.read_csv(self.csv_path)
+        # index_col=False guards against the carOBD trailing-comma column shift
+        # (see src/data_loading.py) — without it, replaying such a CSV silently
+        # misaligns every column.
+        df = pd.read_csv(self.csv_path, index_col=False)
         if not any(p in df.columns for p in USEFUL_PIDS):
             return False
         self._df = df

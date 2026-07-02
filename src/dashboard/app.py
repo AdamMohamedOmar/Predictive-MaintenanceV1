@@ -516,6 +516,14 @@ def _render_status_banner(state: DashboardState) -> None:
         stat1_lbl, stat1_val = "LABEL", "HEALTHY"
         stat2_lbl, stat2_val = "CONF", f"{state.classifier_confidence:.0%}"
         stat3_lbl, stat3_val = "ELAPSED", f"{state.elapsed_s} s"
+    elif state.label_untested:
+        accent = ACCENT_INFO
+        label_d = state.classifier_label.replace("_", " ").upper()
+        title = f"UNTESTED — {label_d}"
+        subtitle = "Required PID unavailable on this vehicle · score suppressed"
+        stat1_lbl, stat1_val = "STATUS", "UNTESTED"
+        stat2_lbl, stat2_val = "CONF", f"{state.classifier_confidence:.0%}"
+        stat3_lbl, stat3_val = "ELAPSED", f"{state.elapsed_s} s"
     else:
         # Fault suspected but voting not complete
         accent = ACCENT_WARN
@@ -999,6 +1007,8 @@ def _render_shap_panel(state: DashboardState) -> None:
 
     # Title strip — label + confidence in Saira Condensed
     label_display = state.classifier_label.replace("_", " ").upper()
+    if state.label_untested:
+        label_display += " (UNTESTED)"
     st.markdown(
         f'<div style="font-family:{FONT_DISPLAY};font-size:11px;'
         f"text-transform:uppercase;letter-spacing:0.1em;"

@@ -48,6 +48,7 @@ import pandas as pd
 
 from src.config import MODELS_DIR, WINDOW_LENGTH_S, WINDOW_STRIDE_S
 from src.diagnostics.cold_start_checker import ColdStartAlert, ColdStartChecker
+from src.eval.pid_availability import available_pids, untested_faults
 from src.features.extractor import extract_features, feature_names
 from src.features.severity import compute_severity
 from src.models.anomaly import AnomalyDetector
@@ -105,6 +106,12 @@ class DashboardState:
     # 0.0 when the detector is not loaded (model file missing) or the
     # buffer is still warming up — same convention as severities.
     anomaly_score: float = 0.0
+
+    # True when the winning classifier label depends on a PID this vehicle does
+    # not provide (e.g. air_system needs MAP on a MAF car). The prediction is
+    # then untrustworthy: it is NOT allowed to raise a fault alert, and the UI
+    # should mark it "untested" rather than showing it as a confirmed fault.
+    label_untested: bool = False
 
 
 def _initial_state() -> DashboardState:
@@ -429,24 +436,37 @@ class InferenceEngine:
         # Feature extraction — pass real poll rate so time-axis features are correct
         feats = extract_features(window_df, sample_hz=self._sample_hz)
 
-        # NaN-fill: when a PID is unsupported by the ECU its column is all NaN,
-        # which propagates through mean/std/etc. in extract_features.  Substitute
-        # the scaler's healthy mean so the z-score becomes 0 ("no signal → nominal").
-        # Warn once per feature so the user can see which PIDs are missing without
-        # the log being flooded on every window.
+        # Missing-PID handling. When a PID is unsupported by the ECU its features
+        # are NaN. We DO NOT fill them for the CLASSIFIER: XGBoost routes NaN via
+        # its learned default split directions, whereas filling with the healthy
+        # mean fabricates an out-of-distribution "flat-but-nominal" pattern the
+        # classifier maps to air_system (observed: 97.6% false-positive on a
+        # healthy MAF car with no MAP). The Untested contract
+        # (src/eval/pid_availability.py) suppresses the now-untrustworthy score
+        # for such faults at the reporting layer.
+        #
+        # Physics severity and the IsolationForest CANNOT accept NaN
+        # (decision_function raises), so for THOSE consumers only we substitute
+        # the healthy baseline. Their outputs for a missing-PID fault should be
+        # read as reduced-confidence, per the same Untested contract.
         nan_features = [k for k, v in feats.items() if math.isnan(v)]
         if nan_features:
             first_time = [k for k in nan_features if k not in self._nan_warned]
             if first_time:
                 log.warning(
-                    "NaN features filled with healthy baseline (unsupported PIDs): %s",
+                    "Unsupported-PID features kept NaN for classifier; baseline-filled "
+                    "for severity/anomaly only: %s",
                     first_time,
                 )
                 self._nan_warned.update(first_time)
-            for k in nan_features:
-                feats[k] = self._baselines.get(k, 0.0)
 
-        feats_df = pd.DataFrame([feats])
+        # Filled copy ONLY for the NaN-intolerant physics/anomaly consumers.
+        feats_for_physics = {
+            k: (self._baselines.get(k, 0.0) if math.isnan(v) else v)
+            for k, v in feats.items()
+        }
+
+        feats_df = pd.DataFrame([feats])  # NaN preserved -> classifier routes it
 
         # Classification + SHAP (explain_window normalises internally)
         try:
@@ -485,14 +505,24 @@ class InferenceEngine:
                 confidence = prev.classifier_confidence
                 top_features = prev.top_features
 
+        # Untested-fault suppression: if the winning class relies on a PID this
+        # vehicle does not provide (e.g. air_system needs MAP on a MAF car), the
+        # prediction is not trustworthy — do NOT let it raise a fault alert.
+        # Feed the alerter "healthy" instead so a missing-PID car cannot show a
+        # phantom fault (the 95.9%-air_system case). The raw label is preserved
+        # in all_class_probs for transparency and flagged via label_untested.
+        untested = untested_faults(available_pids(window_df))
+        label_untested = label in untested
+        alerter_label = "healthy" if label_untested else label
+
         # Update temporal voting filter
-        self._alerter.update(label, confidence)
+        self._alerter.update(alerter_label, confidence)
 
         # Current severity (physics formulas)
         severities: dict[str, float] = {}
         for fault in FAULT_TYPES:
             try:
-                severities[fault] = compute_severity(feats, fault, self._baselines)
+                severities[fault] = compute_severity(feats_for_physics, fault, self._baselines)
             except (ValueError, KeyError):
                 severities[fault] = 0.0
 
@@ -504,7 +534,7 @@ class InferenceEngine:
             forecasts = {fault: 0.0 for fault in FAULT_TYPES}
         else:
             try:
-                forecasts = self._forecaster.predict_all(feats)
+                forecasts = self._forecaster.predict_all(feats_for_physics)
             except Exception as exc:
                 log.warning("predict_all failed (%s) — zeroing forecasts", exc)
                 forecasts = {fault: 0.0 for fault in FAULT_TYPES}
@@ -515,7 +545,7 @@ class InferenceEngine:
         anomaly_score = 0.0
         if self._anomaly is not None:
             try:
-                anomaly_score = float(self._anomaly.score(feats, self._norm))
+                anomaly_score = float(self._anomaly.score(feats_for_physics, self._norm))
             except Exception as exc:
                 log.warning("anomaly score failed (%s) — leaving at 0.0", exc)
 
@@ -534,4 +564,5 @@ class InferenceEngine:
             data_quality_ok=True,
             data_quality_violations=[],
             anomaly_score=anomaly_score,
+            label_untested=label_untested,
         )
