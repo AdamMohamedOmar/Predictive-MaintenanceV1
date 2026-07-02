@@ -52,6 +52,8 @@ def train(
     subsample: float = 0.8,
     colsample_bytree: float = 0.8,
     random_seed: int = RANDOM_SEED,
+    class_balance: bool = True,
+    fuel_downweight: float = _FUEL_WEIGHT,
 ) -> tuple[xgb.XGBClassifier, BaselineNormalizer]:
     """Fit a normaliser then an XGBoost classifier on *train_df*.
 
@@ -62,6 +64,19 @@ def train(
     ----------
     train_df : pd.DataFrame
         Training split from ``session_split``.
+    class_balance : bool, default True
+        If True, weight each sample inversely to its CLASS frequency
+        (sklearn "balanced"). After the 129-file expansion the 6 fault
+        classes are uneven — cold_start (~5% of windows) and healthy are
+        scarcer than the 4 injected faults — so this stops the model being
+        dominated by the majority classes. NOTE: this balances CLASSES, not
+        operating regimes; the accel-regime scarcity is a window-length
+        problem and is not addressed here.
+    fuel_downweight : float, default 0.5
+        Extra multiplier on fuel_system samples (historically over-fired,
+        precision 0.457). WARNING: 0.5 was tuned on the pre-fix 8-file
+        dataset; revisit it in the ablation now that we train on 129 files.
+        Set to 1.0 to disable.
 
     Returns
     -------
@@ -74,10 +89,17 @@ def train(
     X = train_norm[feat_cols].to_numpy(dtype=float)
     y = train_norm["label_id"].to_numpy(dtype=int)
 
-    # fuel_system down-weighted (all others at 1.0) to pull its decision
-    # boundary back from healthy/air/TPS regions (precision=0.457 black hole).
-    fuel_id = LABEL_TO_ID["fuel_system"]
-    sample_weights = np.where(y == fuel_id, _FUEL_WEIGHT, 1.0)
+    # Base weights: balance the 6 classes (rescues scarce cold_start/healthy).
+    if class_balance:
+        sample_weights = compute_sample_weight("balanced", y)
+    else:
+        sample_weights = np.ones(len(y), dtype=float)
+
+    # fuel_system down-weighted ON TOP of class balance to pull its decision
+    # boundary back from the healthy/air/TPS region. Stale constant — see docstring.
+    if fuel_downweight != 1.0:
+        fuel_id = LABEL_TO_ID["fuel_system"]
+        sample_weights = sample_weights * np.where(y == fuel_id, fuel_downweight, 1.0)
 
     clf = xgb.XGBClassifier(
         n_estimators=n_estimators,
@@ -94,12 +116,15 @@ def train(
     )
     clf.fit(X, y, sample_weight=sample_weights)
     log.info(
-        "Trained XGB: %d trees, depth %d, lr %.3f, %d train samples, %d features",
+        "Trained XGB: %d trees, depth %d, lr %.3f, %d train samples, %d features "
+        "(class_balance=%s, fuel_downweight=%.2f)",
         n_estimators,
         max_depth,
         learning_rate,
         len(X),
         len(feat_cols),
+        class_balance,
+        fuel_downweight,
     )
     return clf, norm
 

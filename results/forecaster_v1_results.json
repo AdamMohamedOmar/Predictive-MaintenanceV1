@@ -1,46 +1,46 @@
 {
   "air_system": {
     "fault_type": "air_system",
-    "mae": 0.1915976655954708,
-    "mae_pct_of_range": 19.15976655954708,
+    "mae": 0.18032449611898227,
+    "mae_pct_of_range": 18.032449611898226,
     "meets_commit_target": false,
     "meets_stretch_target": false,
-    "n_train": 585,
+    "n_train": 13016,
     "n_test": 167,
-    "severity_target_mean": 0.1836707265006707,
-    "severity_target_std": 0.25819422373360157
+    "severity_target_mean": 0.3120219485042754,
+    "severity_target_std": 0.3507242173836762
   },
   "fuel_system": {
     "fault_type": "fuel_system",
-    "mae": 0.12406767437359813,
-    "mae_pct_of_range": 12.406767437359813,
+    "mae": 0.027676875171989263,
+    "mae_pct_of_range": 2.7676875171989264,
     "meets_commit_target": true,
-    "meets_stretch_target": false,
-    "n_train": 797,
+    "meets_stretch_target": true,
+    "n_train": 16576,
     "n_test": 209,
-    "severity_target_mean": 0.677357362520609,
-    "severity_target_std": 0.27523488224169046
+    "severity_target_mean": 0.7628975722402412,
+    "severity_target_std": 0.25261252008284324
   },
   "coolant_temp_sensor": {
     "fault_type": "coolant_temp_sensor",
-    "mae": 0.006712781730475454,
-    "mae_pct_of_range": 0.6712781730475453,
+    "mae": 0.004207454848044768,
+    "mae_pct_of_range": 0.4207454848044768,
     "meets_commit_target": true,
     "meets_stretch_target": true,
-    "n_train": 797,
+    "n_train": 16576,
     "n_test": 209,
-    "severity_target_mean": 0.9537739116539464,
-    "severity_target_std": 0.1497857151456017
+    "severity_target_mean": 0.9537800876623229,
+    "severity_target_std": 0.14978557313381483
   },
   "throttle_position_sensor": {
     "fault_type": "throttle_position_sensor",
-    "mae": 0.0634801440820954,
-    "mae_pct_of_range": 6.34801440820954,
+    "mae": 0.05896086470967954,
+    "mae_pct_of_range": 5.896086470967954,
     "meets_commit_target": true,
     "meets_stretch_target": true,
-    "n_train": 797,
+    "n_train": 16576,
     "n_test": 209,
-    "severity_target_mean": 0.7638421757889592,
-    "severity_target_std": 0.15925504177791985
+    "severity_target_mean": 0.7573587150679157,
+    "severity_target_std": 0.17294206855262076
   }
 }
