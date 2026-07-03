@@ -113,6 +113,10 @@ class DashboardState:
     # should mark it "untested" rather than showing it as a confirmed fault.
     label_untested: bool = False
 
+    # Faults whose primary PID is unavailable on this vehicle (from the PID
+    # contract). The severity strip shows "UNTESTED" for these instead of a bar.
+    untested_faults: list = field(default_factory=list)
+
 
 def _initial_state() -> DashboardState:
     """Return a blank state used before the first window is ready."""
@@ -565,4 +569,5 @@ class InferenceEngine:
             data_quality_violations=[],
             anomaly_score=anomaly_score,
             label_untested=label_untested,
+            untested_faults=list(untested),
         )

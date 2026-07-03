@@ -998,6 +998,73 @@ def _render_recommendations(state: DashboardState) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
+def _render_severity_strip(state: DashboardState) -> None:
+    """Compact CURRENT-severity bars — physics severity only, no 60s forecast.
+
+    One slim bar per fault (0-100%), coloured by level. The forecaster (which
+    produced phantom 17%/27% severities on healthy cars) is intentionally not
+    shown. Untested faults (primary PID unavailable, e.g. air_system on a MAF
+    car) show "UNTESTED" instead of a bar. On a healthy engine every bar sits
+    near 0 — a simple, honest readout rather than four busy gauges.
+    """
+    faults = [
+        ("air_system", "AIR SYSTEM"),
+        ("fuel_system", "FUEL SYSTEM"),
+        ("coolant_temp_sensor", "COOLANT SENSOR"),
+        ("throttle_position_sensor", "TPS"),
+    ]
+    untested = set(getattr(state, "untested_faults", []) or [])
+    cols = st.columns(4)
+    for (fault, label), col in zip(faults, cols):
+        with col:
+            if fault in untested:
+                body = (
+                    f'<div style="font-family:{FONT_MONO};font-size:15px;font-weight:700;'
+                    f'color:{TEXT_MUTED};margin-top:8px;">UNTESTED</div>'
+                    f'<div style="font-family:{FONT_BODY};font-size:9px;'
+                    f'color:{TEXT_MUTED};">PID unavailable on this vehicle</div>'
+                )
+            else:
+                sev = float(state.severities.get(fault, 0.0))
+                pct = max(0, min(100, int(round(sev * 100))))
+                if sev >= 0.66:
+                    color = ACCENT_ALERT
+                elif sev >= 0.33:
+                    color = "#C9A227"  # amber
+                else:
+                    color = "#3FB27F"  # green
+                body = (
+                    f'<div style="height:8px;border-radius:4px;background:{BORDER};'
+                    f'overflow:hidden;margin-top:10px;">'
+                    f'<div style="height:100%;width:{pct}%;background:{color};'
+                    f'border-radius:4px;"></div></div>'
+                    f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+                    f'color:{TEXT_PRIMARY};margin-top:4px;line-height:1.1;">{pct}%</div>'
+                )
+            st.markdown(
+                f'<div style="padding:6px 2px;">'
+                f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
+                f"text-transform:uppercase;letter-spacing:0.1em;"
+                f'color:{TEXT_SECONDARY};">{label}</div>{body}</div>',
+                unsafe_allow_html=True,
+            )
+
+
+# Render at most this many frames/sec during CSV replay, regardless of playback
+# speed. At high speeds we advance MANY rows per rerun but repaint once, so the
+# screen stays readable instead of flashing ~50x/sec.
+_TARGET_FPS = 5.0
+
+
+def _rows_per_tick(speed: float) -> int:
+    """Rows to advance per rerun so render cadence stays ~_TARGET_FPS.
+
+    speed <= _TARGET_FPS  -> 1 row/tick (render rate == speed, smooth).
+    speed  > _TARGET_FPS  -> speed/_TARGET_FPS rows/tick, one repaint per tick.
+    """
+    return max(1, round(speed / _TARGET_FPS))
+
+
 def main() -> None:
     _init_session_state()
     inject_global_styles()
@@ -1033,25 +1100,29 @@ def main() -> None:
     )
 
     if st.session_state.playing and source is not None:
-        row = source.next_row()
+        is_csv = st.session_state.source_type == "csv"
+        # CSV: advance multiple rows per rerun so we can repaint once at
+        # ~_TARGET_FPS instead of once per row (the 50x flashing). Live: 1/tick.
+        rows_this_tick = _rows_per_tick(speed) if is_csv else 1
 
-        if row is None:
-            if getattr(source, "exhausted", False):
-                # CSV finished
-                st.session_state.playing = False
-            else:
-                # Live source: no fresh row ready this tick — reschedule quickly
-                time.sleep(0.05)
-                st.rerun()
-                return
-        else:
-            # T3.1: InferenceEngine now resamples live rows to 1 Hz before
-            # feeding the 60-row buffer, so features are always computed on a
-            # 1-second time axis regardless of raw adapter poll rate.
-            # Keep set_sample_hz(1.0) so the rate-dependent features
-            # (COOLANT_WARMUP_RATE, FUEL_LOOP_ACTIVE) use the correct axis.
-            # Warn the user if the adapter is too slow to resample reliably.
-            if st.session_state.source_type == "live" and source is not None:
+        for _step in range(rows_this_tick):
+            row = source.next_row()
+
+            if row is None:
+                if getattr(source, "exhausted", False):
+                    # CSV finished
+                    st.session_state.playing = False
+                    break
+                else:
+                    # Live source: no fresh row ready this tick — reschedule quickly
+                    time.sleep(0.05)
+                    st.rerun()
+                    return
+
+            if not is_csv:
+                # T3.1: InferenceEngine resamples live rows to 1 Hz before the
+                # 60-row buffer, so features use a 1-second axis regardless of
+                # adapter poll rate. Warn if the adapter is too slow to resample.
                 poll_hz = getattr(source, "measured_poll_hz", 0.0)
                 engine.set_sample_hz(1.0)  # resampler guarantees 1-Hz downstream
                 if 0 < poll_hz < 0.3:
@@ -1061,6 +1132,7 @@ def main() -> None:
                         "rows and std features collapse to zero. "
                         "Use a faster ELM327 adapter.".format(poll_hz)
                     )
+
             state = engine.update(row)
             st.session_state.latest_state = state
             st.session_state.pid_history.append(row)
@@ -1076,6 +1148,9 @@ def main() -> None:
             st.info("Select a session file in the sidebar and press **Play** to begin.")
     else:
         _render_status_banner(state)
+
+        _section_header("Fault Severity")
+        _render_severity_strip(state)
 
         _section_header("Live PID Readings")
         _render_pid_strip(st.session_state.pid_history)
@@ -1108,8 +1183,10 @@ def main() -> None:
             csv_speed = (
                 st.session_state.streamer.speed if st.session_state.streamer else 1.0
             )
-            # Floor at 20 ms to avoid hammering Streamlit's render loop
-            time.sleep(max(0.02, 1.0 / csv_speed))
+            # We advanced _rows_per_tick(csv_speed) rows this rerun; sleep so the
+            # effective row rate still equals csv_speed while repaints stay near
+            # _TARGET_FPS. Floor at 20 ms to avoid hammering the render loop.
+            time.sleep(max(0.02, _rows_per_tick(csv_speed) / csv_speed))
         else:
             # Live mode: poll at ~20 Hz; actual OBD rows arrive at 1 Hz
             time.sleep(0.05)
