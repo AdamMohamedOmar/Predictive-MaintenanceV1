@@ -998,6 +998,75 @@ def _render_recommendations(state: DashboardState) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
+def _render_session_report(report) -> None:
+    """End-of-read engine-health summary panel (CSV mode).
+
+    Physics-severity only, self-baselined on the first 20% of the recording
+    (that period is excluded from the verdict), with untested faults marked. This
+    is the honest end-of-read verdict; the live severity strip is only a glance.
+    """
+    v = report.verdict
+    if v.startswith("DEVELOPING"):
+        vcolor = ACCENT_ALERT
+    elif v.startswith("HEALTHY"):
+        vcolor = "#3FB27F"
+    else:
+        vcolor = TEXT_SECONDARY  # INSUFFICIENT DATA
+
+    st.markdown(
+        f'<div style="border:1px solid {BORDER_STRONG};border-radius:10px;'
+        f'padding:16px 18px;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'<div style="font-family:{FONT_DISPLAY};font-size:11px;letter-spacing:0.12em;'
+        f'text-transform:uppercase;color:{TEXT_SECONDARY};">End-of-Read Health Report</div>'
+        f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+        f'color:{vcolor};margin-top:6px;">{v}</div>'
+        f'<div style="font-family:{FONT_BODY};font-size:11px;color:{TEXT_MUTED};'
+        f'margin-top:4px;">{report.n_evaluable_windows} evaluable · '
+        f'{report.n_baseline_windows} baseline (excluded) · '
+        f'{report.n_untested_windows} untested windows</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    labels = {
+        "air_system": "AIR SYSTEM",
+        "fuel_system": "FUEL SYSTEM",
+        "coolant_temp_sensor": "COOLANT SENSOR",
+        "throttle_position_sensor": "TPS",
+    }
+    by_fault = {fr.fault: fr for fr in report.faults}
+    cols = st.columns(4)
+    for fault, col in zip(labels, cols):
+        fr = by_fault.get(fault)
+        with col:
+            if fr is None:
+                status_txt, scolor, detail = "—", TEXT_MUTED, ""
+            elif fr.status == "untested":
+                status_txt, scolor, detail = "UNTESTED", TEXT_MUTED, "PID unavailable"
+            elif fr.status == "detected":
+                status_txt, scolor = "DETECTED", ACCENT_ALERT
+                detail = f"severity {fr.severity_pct:.0f}%"
+            else:
+                status_txt, scolor, detail = "HEALTHY", "#3FB27F", ""
+            st.markdown(
+                f'<div style="padding:6px 2px;">'
+                f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
+                f"text-transform:uppercase;letter-spacing:0.1em;"
+                f'color:{TEXT_SECONDARY};">{labels[fault]}</div>'
+                f'<div style="font-family:{FONT_MONO};font-size:16px;font-weight:700;'
+                f'color:{scolor};margin-top:6px;">{status_txt}</div>'
+                f'<div style="font-family:{FONT_BODY};font-size:10px;'
+                f'color:{TEXT_MUTED};">{detail}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    for c in report.caveats:
+        st.markdown(
+            f'<div style="font-family:{FONT_BODY};font-size:10px;color:{TEXT_MUTED};'
+            f'margin-top:2px;">• {c}</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def _render_severity_strip(state: DashboardState) -> None:
     """Compact CURRENT-severity bars — physics severity only, no 60s forecast.
 
@@ -1100,6 +1169,7 @@ def main() -> None:
     )
 
     if st.session_state.playing and source is not None:
+        st.session_state.session_report = None  # clear stale report while replaying
         is_csv = st.session_state.source_type == "csv"
         # CSV: advance multiple rows per rerun so we can repaint once at
         # ~_TARGET_FPS instead of once per row (the 50x flashing). Live: 1/tick.
@@ -1110,8 +1180,20 @@ def main() -> None:
 
             if row is None:
                 if getattr(source, "exhausted", False):
-                    # CSV finished
+                    # CSV finished — build the end-of-read health report from the
+                    # completed per-window history (self-baseline + untested
+                    # handling live inside build_session_report).
                     st.session_state.playing = False
+                    if is_csv:
+                        from src.eval.session_report import build_session_report
+
+                        _last = st.session_state.latest_state
+                        _untested = set(
+                            getattr(_last, "untested_faults", []) or []
+                        )
+                        st.session_state.session_report = build_session_report(
+                            engine.window_history, _untested
+                        )
                     break
                 else:
                     # Live source: no fresh row ready this tick — reschedule quickly
@@ -1147,6 +1229,10 @@ def main() -> None:
         else:
             st.info("Select a session file in the sidebar and press **Play** to begin.")
     else:
+        _report = st.session_state.get("session_report")
+        if _report is not None:
+            _render_session_report(_report)
+
         _render_status_banner(state)
 
         _section_header("Fault Severity")

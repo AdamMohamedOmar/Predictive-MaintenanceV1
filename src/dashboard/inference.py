@@ -238,6 +238,9 @@ class InferenceEngine:
         # Tracks which NaN-filled features have already been logged so we warn
         # once per feature rather than spamming the log every window.
         self._nan_warned: set[str] = set()
+        # Per-window record for the end-of-read session report (CSV mode). Each
+        # entry: {elapsed_s, label, severities}. Cleared on reset().
+        self._window_history: list[dict] = []
         # Actual ECU poll rate — 1.0 for CSV replay (carOBD is 1 Hz); updated
         # each live tick via set_sample_hz() so rate-dependent features are correct.
         # After T3.1 the resampler ensures the buffer always sees 1-Hz rows,
@@ -394,6 +397,7 @@ class InferenceEngine:
         self._elapsed_s = 0
         self._last_state = _initial_state()
         self._nan_warned.clear()
+        self._window_history.clear()
         self._next_sample_t = None  # T3.1: restart resampler clock on session change
 
     def set_sample_hz(self, hz: float) -> None:
@@ -417,6 +421,11 @@ class InferenceEngine:
     def current_state(self) -> DashboardState:
         """Last computed state without consuming a new row."""
         return self._last_state
+
+    @property
+    def window_history(self) -> list[dict]:
+        """Per-window records (elapsed_s, label, severities) for the session report."""
+        return self._window_history
 
     @property
     def degraded_pid_count(self) -> int:
@@ -552,6 +561,15 @@ class InferenceEngine:
                 anomaly_score = float(self._anomaly.score(feats_for_physics, self._norm))
             except Exception as exc:
                 log.warning("anomaly score failed (%s) — leaving at 0.0", exc)
+
+        # Record this window for the end-of-read session report (CSV mode).
+        self._window_history.append(
+            {
+                "elapsed_s": self._elapsed_s,
+                "label": label,
+                "severities": dict(severities),
+            }
+        )
 
         return DashboardState(
             elapsed_s=self._elapsed_s,
