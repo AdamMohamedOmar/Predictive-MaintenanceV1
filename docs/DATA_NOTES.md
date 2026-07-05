@@ -56,85 +56,79 @@ PID. Two distinct issues were found.
 These four PIDs are dropped by default in `load_carobd_csv()`. They can be retained
 for explicit data-quality auditing via `drop_unusable=False`.
 
-**Implication for the project:** the Charter's original Oxygen Sensor fault definition
-(Section 6) listed both `SHORT_TERM_FUEL_TRIM_BANK_1` and `FUEL_AIR_COMMANDED_EQUIV_RATIO`
-as signature PIDs. With the equivalence ratio unavailable, the O2 fault is detectable
-via STFT (primary) with LTFT drift as the slower secondary indicator. This is the
-canonical OBD-II observable for O2 sensor health and is sufficient for the project's
-classification and forecasting goals. The Charter is not formally amended — this is
-a documented implementation detail, not a scope change.
+**Implication for the project:** the always-zero `FUEL_AIR_COMMANDED_EQUIV_RATIO`
+made the primary O₂-sensor signature unobservable, and the oxygen sensor fault was
+formally **dropped from the taxonomy in charter v1.2** (29 May 2026); its deployment
+slot was reassigned to the `cold_start` regime class. See `docs/CHARTER.md` §6.
 
-### Issue 2: Cross-file inconsistency in 4 critical signature PIDs
+### Issue 2: Trailing-comma column shift (RESOLVED — was misdiagnosed as "120 unusable files")
 
-A physical-bounds check across all 129 files revealed three distinct file populations:
+The Week 1 audit found three file populations via a physical-bounds check:
 
-| Pattern (Speed \| Coolant \| Timing \| STFT) | File count | Status |
-|----------------------------------------------|------------|--------|
+| Pattern (Speed \| Coolant \| Timing \| STFT) | File count | Week 1 verdict |
+|----------------------------------------------|------------|----------------|
 | OK \| OK \| OK \| OK                         | 9          | Usable |
-| OK \| OK \| BAD \| OK                        | 12         | Timing column out of physical range |
-| OK \| OK \| BAD \| BAD                       | 108        | Both timing and STFT columns out of physical range |
+| OK \| OK \| BAD \| OK                        | 12         | "Timing out of range" |
+| OK \| OK \| BAD \| BAD                       | 108        | "Timing and STFT out of range" |
 
-In the 120 files marked BAD, the affected columns contain values that are physically
-impossible for the named PID (e.g. timing advance values of 30°–776° where the
-OBD-II spec bounds timing at ±64°). Vehicle speed and coolant temperature are
-within bounds in **all** 129 files, ruling out a simple column-shift hypothesis.
+The Week 1 interpretation (firmware-version inconsistency in the logger) was
+**wrong**. The June 2026 data-integrity investigation found the real cause:
 
-**Suspected cause:** firmware-version inconsistency in the original carOBD
-recordings. The author's repository contains two firmware programs
-(`discover-pids.ino` and `obd-logger.ino`); some recordings appear to use raw
-or differently-decoded values for select PIDs. The exact decoding rule was not
-investigated in Week 1 to preserve schedule.
+**~120 of the carOBD files end each data row with a trailing comma** (28 fields
+against 27 header names). A bare `pd.read_csv()` resolves that mismatch by
+silently promoting the first column to the DataFrame index, which shifts **every
+column one position left** — `COOLANT_TEMPERATURE` reads fuel-trim values,
+`TIMING_ADVANCE` reads catalyst temperatures (hence the impossible 30°–776°
+readings), and so on. The data itself was never corrupt; the parse was.
 
-**Decision:** use only the 9 fully-clean files for this project. Documented in
-`src.data_loading.USABLE_CAROBD_FILES`. The 9-file working set:
+**Fix (all three pieces are load-bearing — see CLAUDE.md "Protected invariants"):**
 
-| File         | Rows | Minutes |
-|--------------|------|---------|
-| `drive1.csv` | 2709 | 45.1    |
-| `live5.csv`  | 2384 | 39.7    |
-| `live6.csv`  | 2287 | 38.1    |
-| `live7.csv`  | 2453 | 40.9    |
-| `live8.csv`  | 2413 | 40.2    |
-| `live9.csv`  | 2168 | 36.1    |
-| `live10.csv` | 1176 | 19.6    |
-| `live11.csv` | 1727 | 28.8    |
-| `live12.csv` | 1151 | 19.2    |
-| **Total**    | **18468** | **307.8** (~5.13 hours) |
+1. `pd.read_csv(path, index_col=False)` in `src/data_loading.py`,
+   `scripts/audit_carobd.py`, and `src/live/replay_source.py` disables the
+   index promotion so all 27 columns align in every file.
+2. `df.apply(pd.to_numeric, errors="coerce")` in the loader handles isolated
+   non-numeric cells (e.g. a stray `' '` in `INTAKE_AIR_TEMPERATURE` in
+   `live16.csv`) that would otherwise object-type an entire column.
+3. `_assert_physical_bounds()` remains as a misalignment tripwire: a shifted
+   file now fails **loudly** at load time instead of entering training as
+   scrambled "healthy" data.
 
-**Class-balance note:** 1 of 9 files is "drive" mode; 8 are "live" mode (work-to-home
-commute). The training set is therefore heavily weighted toward the "live" regime.
-This is documented as a known dataset limitation; mitigation strategies will be
-considered in Week 3 (e.g. session-level stratification in cross-validation, weighted
-sampling) and revisited at the Week 4 mid-project checkpoint.
+**Result: all 129 files parse cleanly and pass the physical-bounds guard.**
+The hardcoded 9-file whitelist (`USABLE_CAROBD_FILES`) was removed;
+`src.data_loading.list_usable_files()` now validates each file dynamically
+against the bounds guard and skips (with a warning) anything that fails.
 
-**Stretch path:** if at the Week 4 checkpoint the classifier is starved for data,
-the 120 BAD files may be reverse-engineered to recover their decoded values, OR
-healthy recordings from the Skoda Roomster may supplement the dataset. Charter
-amendment would be required only in the latter case.
+**Class-balance note (historical):** the frozen v1 models (13 June 2026) were
+trained on the original 9-file working set (drive1, live5–live12, ~5.13 h),
+which is heavily weighted toward the "live" commute regime. The parse fix
+expands the usable pool to all 129 files (idle/drive/live/ufpe/long) for any
+future retraining; the frozen artefacts and their headline numbers are
+unchanged.
 
-## Working PID list (12 PIDs)
+## Working PID list (14 PIDs)
 
-The 12 PIDs in `src.config.USEFUL_PIDS` are the working feature set, derived from
+The 14 PIDs in `src.config.USEFUL_PIDS` are the working feature set, derived from
 the Charter Section 6 fault taxonomy plus context PIDs for operating-regime
-normalization. Rationale lives inline in `config.py`. This list is locked for
-Weeks 2–3 and will be re-evaluated at Week 4.
+normalization. Rationale lives inline in `config.py`.
 
 ## ELM327 adapter
 
-[Order status to be updated when the adapter is ordered. Pending team decision
-on price tier; Wednesday is the deadline for ordering.]
+Adapter acquired and used for the Week 6–7 live integration (Skoda Roomster
+baseline capture and live dashboard validation). See `scripts/live_discover.py`
+for the go/no-go adapter check.
 
 ## Audit reproducibility
 
-The audit that produced the 9-file working set was performed in a Jupyter notebook
-during Week 1 Monday. The full audit table for all 129 files (per-file, per-PID
-summary statistics) is captured at `docs/data_audit_2026-04-27.txt`. Re-running
-the audit on a new dataset version should produce a similar table; if the
-populations of file patterns shift significantly, the working set must be
-re-derived.
+The bounds audit can be re-run at any time with `scripts/audit_carobd.py`,
+which uses the corrected `index_col=False` parse; on the current dataset it
+reports all 129 files within physical bounds. (The original Week 1 audit and
+its "120 unusable files" conclusion were produced by the same bounds check run
+on the misparsed, column-shifted data.)
 
 ## Change log
 
 | Date       | Change |
 |------------|--------|
 | 2026-04-27 | Initial audit, 9-file working set established, 4 unusable PIDs dropped. |
+| 2026-06    | Trailing-comma column shift identified as the real cause of the "120 unusable files"; `index_col=False` parse fix + `pd.to_numeric` coercion + physical-bounds guard land in the loader; 9-file whitelist replaced by dynamic `list_usable_files()`; all 129 files usable. |
+| 2026-07-05 | Doc updated to reflect the above (Issue 2 rewritten, O₂ note aligned with charter v1.2, PID count corrected to 14). |

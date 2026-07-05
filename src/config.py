@@ -48,14 +48,13 @@ INJECTION_NOISE_STD = 0.3
 
 
 # ─── PID selection ────────────────────────────────────────────────────────
-# The 27 PIDs in carOBD include several that are unusable (constant values,
-# OBD sentinels) or unreliable (firmware-version inconsistencies that produce
-# physically impossible values in many files). See docs/DATA_NOTES.md for the
-# full audit.
+# The 27 PIDs in carOBD include four that are unusable (constant values or
+# OBD sentinels). See docs/DATA_NOTES.md for the full audit, including the
+# trailing-comma parse fix that recovered all 129 files.
 #
 # USEFUL_PIDS is the working set for feature extraction. Every PID listed
-# below has been verified to vary plausibly in the audited-clean carOBD
-# subset (see USABLE_CAROBD_FILES in src/data_loading.py).
+# below has been verified to vary plausibly across the carOBD files that
+# pass the physical-bounds guard (see list_usable_files in src/data_loading.py).
 USEFUL_PIDS = [
     "ENGINE_RPM",
     "VEHICLE_SPEED",

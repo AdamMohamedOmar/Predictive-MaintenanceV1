@@ -88,7 +88,8 @@ pip install -r requirements.txt
 pytest
 ```
 
-If `pytest` passes, the environment is working. You'll see one trivial test pass for now; more arrive as the project progresses.
+If `pytest` passes, the environment is working. The full suite is ~1200 tests;
+the data-dependent ones skip unless `data/raw/carOBD/` is populated (see Data below).
 
 ---
 
@@ -122,11 +123,16 @@ If `pytest` passes, the environment is working. You'll see one trivial test pass
 
 ## Data
 
-The `data/` directory is **gitignored**. To get the training data:
+The `data/` directory is **gitignored**. To get the training data, clone the
+carOBD repository and copy its CSVs **flat** into `data/raw/carOBD/` (the
+loaders glob `data/raw/carOBD/*.csv` directly — a nested `obdiidata/` folder
+will not be found):
 
 ```bash
-# Download carOBD dataset
-git clone https://github.com/eron93br/carOBD.git data/raw/carOBD
+# Download carOBD dataset (CSVs live in the repo's obdiidata/ folder)
+git clone https://github.com/eron93br/carOBD.git /tmp/carOBD
+mkdir -p data/raw/carOBD
+cp /tmp/carOBD/obdiidata/*.csv data/raw/carOBD/
 ```
 
 Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are committed to the repo since they're small and project-specific.
@@ -139,8 +145,8 @@ Skoda baseline recordings (Week 6 onwards) are in `data/skoda_baseline/` and are
 
 | Result | Command | Outputs |
 |---|---|---|
-| Build dataset + train all models | `python scripts/rebuild_all.py` | `data/synthetic/`, `models/`, `results/` |
-| Train forecasters only | `python scripts/train_forecasters.py` | `models/forecaster_v1.pkl`, `results/forecaster_v1_results.json` |
+| Build dataset + train all models | `python -m scripts.rebuild_all` | `data/synthetic/`, `models/`, `results/` |
+| Train forecasters only | `python -m scripts.train_forecasters` | `models/forecaster_v1.pkl`, `results/forecaster_v1_results.json` |
 | Run dashboard (CSV replay) | `streamlit run src/dashboard/app.py` | Local web UI at localhost:8501 |
 | Check live OBD adapter | `python -m scripts.live_discover` | Go/no-go report for ELM327 |
 | Capture Skoda baseline | `python -m scripts.live_baseline_capture --port COM3` | `models/<vehicle>_normalizer.pkl` |
