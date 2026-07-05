@@ -67,6 +67,9 @@ from src.dashboard.theme import (
     FONT_DISPLAY,
     FONT_BODY,
     FONT_MONO,
+    SEVERITY_OK,
+    SEVERITY_CAUTION,
+    severity_color,
 )
 from src.live.obd_source import LiveObdSource
 
@@ -1006,7 +1009,7 @@ def _render_session_report(report) -> None:
     if v.startswith("DEVELOPING"):
         vcolor = ACCENT_ALERT
     elif v.startswith("HEALTHY"):
-        vcolor = "#3FB27F"
+        vcolor = SEVERITY_OK
     else:
         vcolor = TEXT_SECONDARY  # INSUFFICIENT DATA
 
@@ -1043,10 +1046,10 @@ def _render_session_report(report) -> None:
                 status_txt, scolor = "DETECTED", ACCENT_ALERT
                 detail = f"severity {fr.severity_pct:.0f}%"
             elif fr.status == "inconclusive":
-                status_txt, scolor = "INCONCLUSIVE", "#C9A227"
+                status_txt, scolor = "INCONCLUSIVE", SEVERITY_CAUTION
                 detail = f"{fr.window_share_pct:.0f}% label share, ~0 severity"
             else:
-                status_txt, scolor, detail = "HEALTHY", "#3FB27F", ""
+                status_txt, scolor, detail = "HEALTHY", SEVERITY_OK, ""
             st.markdown(
                 f'<div style="padding:6px 2px;">'
                 f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
@@ -1096,12 +1099,7 @@ def _render_severity_strip(state: DashboardState) -> None:
             else:
                 sev = float(state.severities.get(fault, 0.0))
                 pct = max(0, min(100, int(round(sev * 100))))
-                if sev >= 0.66:
-                    color = ACCENT_ALERT
-                elif sev >= 0.33:
-                    color = "#C9A227"  # amber
-                else:
-                    color = "#3FB27F"  # green
+                color = severity_color(sev)
                 body = (
                     f'<div style="height:8px;border-radius:4px;background:{BORDER};'
                     f'overflow:hidden;margin-top:10px;">'
