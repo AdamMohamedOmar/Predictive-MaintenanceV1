@@ -9,7 +9,6 @@ These tests have no scientific meaning - they exist to confirm:
 If any of these fail, the environment is broken and no other work can proceed.
 """
 
-from pathlib import Path
 
 
 def test_src_package_importable():

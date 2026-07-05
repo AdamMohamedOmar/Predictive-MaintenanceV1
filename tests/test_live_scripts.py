@@ -11,7 +11,6 @@ from src.features.normalizer import BaselineNormalizer
 from scripts.live_discover import MIN_POLL_HZ, MIN_SUPPORTED_PIDS, evaluate
 from scripts.live_baseline_capture import (
     _MIN_COOLANT_TEMP,
-    _MIN_MEAN_SPEED,
     _MIN_WINDOWS,
     process_captured_rows,
 )
@@ -119,7 +118,6 @@ def test_process_produces_valid_normalizer():
     rows = _make_rows(400)
     norm, _ = process_captured_rows(rows)
     # Build a test feature row and z-score it
-    import pandas as pd
     from src.features.extractor import feature_names
     feat_names = feature_names()
     # Create a dummy feature row with realistic values

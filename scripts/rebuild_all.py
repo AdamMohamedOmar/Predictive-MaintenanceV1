@@ -5,7 +5,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # 1. Build classifier dataset
 # P2-2: magnitude_jitter draws a per-(session,fault) severity/shape so the
 # classifier sees a continuum of degradation rather than one fixed fault shape.
-from src.features.dataset_builder import build_dataset, load_dataset
+from src.features.dataset_builder import build_dataset
 print("=== Building classifier dataset ===")
 ds = build_dataset(magnitude_jitter=(0.6, 1.4))  # centred on the validated default magnitude (±40%)
 print(f"Dataset: {len(ds)} windows, {ds['label'].value_counts().to_dict()}")
@@ -20,7 +20,6 @@ print(f"Train: {len(train_df)}, Test: {len(test_df)}")
 
 # 3. Retrain XGBoost classifier
 from src.models.xgb_classifier import train as train_xgb, evaluate as eval_xgb, save_model as save_xgb
-from src.features.normalizer import normalised_feature_names
 
 print("\n=== Training XGBoost classifier ===")
 clf, norm_clf = train_xgb(train_df, n_estimators=300)

@@ -46,7 +46,7 @@ import pandas as pd
 import serial.tools.list_ports
 import streamlit as st
 
-from src.config import MODELS_DIR, USEFUL_PIDS
+from src.config import MODELS_DIR
 from src.dashboard.inference import DashboardState, InferenceEngine
 from src.dashboard.streamer import CsvStreamer
 from src.dashboard.styles import inject_global_styles
@@ -67,11 +67,8 @@ from src.dashboard.theme import (
     FONT_DISPLAY,
     FONT_BODY,
     FONT_MONO,
-    state_accent,
 )
 from src.live.obd_source import LiveObdSource
-from src.models.classifier import ALL_LABELS
-from src.models.forecaster import FAULT_TYPES
 
 # ── Page-level config (must be first Streamlit call) ─────────────────────────
 

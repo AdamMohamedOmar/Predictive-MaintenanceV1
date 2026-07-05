@@ -1,8 +1,6 @@
 """Tests for the per-row physics sanity check."""
 
-import math
 
-import pytest
 
 from src.dashboard.sanity import check_row, RowSanityChecker
 

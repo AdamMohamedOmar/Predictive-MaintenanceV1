@@ -2,7 +2,6 @@
 Covers the live stack without an ELM327. Slow (~10-20 s: SHAP init)."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest

@@ -22,7 +22,6 @@ cruise      everything else                     steady closed-loop driving
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 # Coolant and speed thresholds (single-value, priority-ordered)

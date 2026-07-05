@@ -13,7 +13,6 @@ slipping into training as scrambled "healthy" data.
 These tests are skipped automatically if the carOBD data is not present.
 """
 
-from pathlib import Path
 
 import pandas as pd
 import pytest

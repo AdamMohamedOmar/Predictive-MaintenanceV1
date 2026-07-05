@@ -1,13 +1,12 @@
 """Probe classifier and forecaster for evidence of injection-signature memorisation."""
 import json
-import numpy as np
 import pandas as pd
 import pickle
 from pathlib import Path
 
 from src.features.normalizer import BaselineNormalizer, normalised_feature_names
 from src.features.dataset_builder import load_dataset
-from src.models.classifier import session_split, _HELD_OUT_SESSIONS
+from src.models.classifier import session_split
 
 ds = load_dataset()
 train_df, test_df = session_split(ds)
@@ -76,7 +75,6 @@ print("4. POST-RAMP ONLY? — are classifier's correctly-labelled faults all eas
 print("=" * 70)
 # Look at correctly-predicted faults: are they tightly clustered (high severity = post-ramp easy)
 # or evenly distributed?
-import json
 meta_path = Path("data/synthetic/dataset_v1_meta.json")
 if meta_path.exists():
     with open(meta_path) as f:

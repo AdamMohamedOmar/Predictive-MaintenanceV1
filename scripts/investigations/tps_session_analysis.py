@@ -1,8 +1,5 @@
 """Investigate TPS per-session severity to identify distribution shift."""
 import pandas as pd
-import numpy as np
-import xgboost as xgb
-from sklearn.metrics import mean_absolute_error
 
 from src.features.normalizer import BaselineNormalizer, normalised_feature_names
 from src.features.dataset_builder import load_dataset

@@ -32,7 +32,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.utils.class_weight import compute_sample_weight
 
 from src.config import MODELS_DIR, RANDOM_SEED, RESULTS_DIR
-from src.features.dataset_builder import FAULT_TYPES, LABEL_TO_ID
+from src.features.dataset_builder import LABEL_TO_ID
 from src.features.normalizer import BaselineNormalizer, normalised_feature_names
 from src.models.classifier import ALL_LABELS
 

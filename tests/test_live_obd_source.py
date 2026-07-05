@@ -9,7 +9,6 @@ import math
 import time
 from unittest.mock import MagicMock, patch
 
-import obd
 import pytest
 from obd import OBDResponse
 from obd import Unit as OBDUnit

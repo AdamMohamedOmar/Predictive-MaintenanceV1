@@ -35,9 +35,7 @@ import xgboost as xgb
 from sklearn.metrics import mean_absolute_error
 
 from src.config import MODELS_DIR, RANDOM_SEED, RESULTS_DIR
-from src.features.extractor import feature_names
 from src.features.normalizer import BaselineNormalizer, normalised_feature_names
-from src.features.severity import compute_severity
 from src.models.classifier import _HELD_OUT_SESSIONS
 
 log = logging.getLogger(__name__)

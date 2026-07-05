@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 
-from src.features.dataset_builder import LABEL_TO_ID, FAULT_TYPES
+from src.features.dataset_builder import LABEL_TO_ID
 from src.features.extractor import feature_names
 from src.models.classifier import (
     session_split,

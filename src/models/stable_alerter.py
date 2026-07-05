@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Optional
+from typing import TYPE_CHECKING, Deque
 
 if TYPE_CHECKING:
     from src.diagnostics.cold_start_checker import ColdStartAlert

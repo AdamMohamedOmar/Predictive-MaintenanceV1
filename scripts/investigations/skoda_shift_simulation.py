@@ -7,12 +7,10 @@ Skoda Roomster 2007 likely has different baseline calibrations than Etios 2014:
   - Different barometric pressure if at different altitude
 
 We simulate this by adding plausible offsets to the test set and re-classifying."""
-import numpy as np
-import pandas as pd
 import pickle
 from sklearn.metrics import f1_score
 
-from src.features.normalizer import BaselineNormalizer, normalised_feature_names
+from src.features.normalizer import normalised_feature_names
 from src.features.dataset_builder import load_dataset
 from src.models.classifier import session_split, ALL_LABELS
 

@@ -1,6 +1,5 @@
 """Test THROTTLE/ENGINE_LOAD as TPS severity proxy."""
 import pandas as pd
-import numpy as np
 from src.features.dataset_builder import load_dataset
 from src.models.classifier import session_split, _HELD_OUT_SESSIONS
 

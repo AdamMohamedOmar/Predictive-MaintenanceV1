@@ -30,7 +30,7 @@ from typing import Optional
 
 import pandas as pd
 
-from src.config import MODELS_DIR, USEFUL_PIDS, WINDOW_STRIDE_S
+from src.config import USEFUL_PIDS, WINDOW_STRIDE_S
 from src.dashboard.inference import InferenceEngine
 from src.data_loading import load_carobd_csv
 

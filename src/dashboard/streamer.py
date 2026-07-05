@@ -19,7 +19,6 @@ Memory is trivial: a 5-minute session at 1 Hz is ≤ 300 rows × 14 PIDs.
 
 from __future__ import annotations
 
-from collections import deque
 from pathlib import Path
 from typing import Optional
 

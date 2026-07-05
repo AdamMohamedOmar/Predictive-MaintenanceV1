@@ -1,6 +1,5 @@
 """Tests for the cold-start rule-based diagnostic engine."""
-import pytest
-from src.diagnostics.cold_start_checker import ColdStartChecker, ColdStartAlert
+from src.diagnostics.cold_start_checker import ColdStartChecker
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
