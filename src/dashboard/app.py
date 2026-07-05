@@ -46,7 +46,6 @@ import pandas as pd
 import serial.tools.list_ports
 import streamlit as st
 
-from src.config import MODELS_DIR
 from src.dashboard.inference import DashboardState, InferenceEngine
 from src.dashboard.streamer import CsvStreamer
 from src.dashboard.styles import inject_global_styles
@@ -121,17 +120,16 @@ def _hex_with_alpha(hex_color: str, alpha: float) -> str:
 
 
 @st.cache_resource
-def _load_engine(normalizer_path: str | None = None) -> InferenceEngine | None:
+def _load_engine() -> InferenceEngine | None:
     """Load XGBoost + SHAP + FaultForecaster.  Returns None if models missing.
 
-    Keyed by normalizer_path so switching baselines (Etios → Skoda) rebuilds
-    the engine once and then caches the new instance.
+    The dashboard always runs the bundled training-baseline normalizer.
+    Per-vehicle normalizers are consumed through
+    InferenceEngine(normalizer_override=...) by scripts/score_recording.py
+    and the FastAPI car flow — not through this UI.
     """
     try:
-        from pathlib import Path
-
-        override = Path(normalizer_path) if normalizer_path else None
-        return InferenceEngine(normalizer_override=override)
+        return InferenceEngine()
     except FileNotFoundError:
         return None
 
@@ -144,13 +142,11 @@ def _init_session_state() -> None:
         "source_type": "csv",  # "csv" | "live"
         "streamer": None,  # CsvStreamer | None  (csv mode)
         "live_source": None,  # LiveObdSource | None  (live mode)
-        "normalizer_path": None,  # str | None — path to active normalizer pkl
         "playing": False,
         "pid_history": deque(maxlen=_HISTORY_LEN),
         "latest_state": None,  # DashboardState | None
         "alert_log": [],  # list[str]  — timestamped event strings
         "last_active_fault": "",  # track transitions for alert log
-        "vehicle_id": "",  # VIN, plate, or shop job number
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -160,8 +156,8 @@ def _init_session_state() -> None:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 
-def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
-    """Render controls.  Returns (normalizer_path, speed).  Handles all interactions."""
+def _render_sidebar(engine: InferenceEngine | None) -> float:
+    """Render controls.  Returns the playback speed.  Handles all interactions."""
     st.sidebar.markdown(
         f'<div style="font-family:{FONT_DISPLAY};font-size:0.75rem;text-transform:uppercase;'
         f'letter-spacing:0.1em;color:{TEXT_MUTED};padding:4px 0 8px 0;">'
@@ -170,17 +166,6 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         f"Session Controls</div>",
         unsafe_allow_html=True,
     )
-
-    # ── Vehicle ID ────────────────────────────────────────────────────────────
-    vehicle_id = st.sidebar.text_input(
-        "VIN / Plate / Job#",
-        value=st.session_state.vehicle_id,
-        max_chars=30,
-        placeholder="e.g. VSSZZZ6KZ7R123456",
-    )
-    st.session_state.vehicle_id = vehicle_id.strip()
-
-    st.sidebar.divider()
 
     # ── Source selector ───────────────────────────────────────────────────────
     source_type = st.sidebar.radio(
@@ -201,32 +186,13 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
 
     st.sidebar.divider()
 
-    # ── Normalizer picker (shared by both modes) ──────────────────────────────
-    norm_files = sorted(MODELS_DIR.glob("*_normalizer.pkl"))
-    norm_options = ["Built-in (training baseline)"] + [p.name for p in norm_files]
-    norm_index = st.sidebar.selectbox("Normalizer", norm_options, index=0)
-    if norm_index == "Built-in (training baseline)":
-        normalizer_path = None
-    else:
-        normalizer_path = str(MODELS_DIR / norm_index)
-
-    # Warn if live mode selected but no vehicle normalizer exists
-    if new_source_type == "live" and not norm_files:
-        st.sidebar.warning(
-            "No vehicle normalizer found.  Run:\n"
-            "`python -m scripts.live_baseline_capture`"
-        )
-
-    # Store normalizer choice so main() can key the engine cache
-    st.session_state.normalizer_path = normalizer_path
-
     speed = 1.0  # default; overridden in CSV section below
 
     # ── CSV mode controls ─────────────────────────────────────────────────────
     if new_source_type == "csv":
         if not _DATA_DIR.exists():
             st.sidebar.error(f"Data directory not found:\n{_DATA_DIR}")
-            return normalizer_path, 1.0
+            return 1.0
 
         # Demo fault files (data/demo/) listed first — they're pre-injected
         # so you see fault detection immediately.  Raw carOBD files follow.
@@ -235,7 +201,7 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         csv_files = demo_files + raw_files
         if not csv_files:
             st.sidebar.warning("No CSV files found. Run scripts/generate_demo_data.py first.")
-            return normalizer_path, 1.0
+            return 1.0
 
         file_labels = (
             [f"[DEMO] {p.name}" for p in demo_files]
@@ -377,7 +343,7 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         else:
             st.sidebar.info("Not connected.  Press Connect to start.")
 
-    return normalizer_path, speed
+    return speed
 
 
 # ── Panel renderers ───────────────────────────────────────────────────────────
@@ -1138,11 +1104,8 @@ def main() -> None:
 
     st.title("Predictive Maintenance — Live OBD-II Dashboard")
 
-    # Load engine keyed by current normalizer; sidebar may update it this rerun
-    engine = _load_engine(st.session_state.normalizer_path)
-    _normalizer_path, speed = _render_sidebar(engine)
-    # Reload after sidebar in case normalizer selectbox changed (cache hit if unchanged)
-    engine = _load_engine(st.session_state.normalizer_path)
+    engine = _load_engine()
+    speed = _render_sidebar(engine)
 
     if engine is None:
         st.error(
