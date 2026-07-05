@@ -158,3 +158,37 @@ RANDOM_SEED      = 42
 | `src/dashboard/` | Streamlit live dashboard (Weeks 4, 7) |
 | `docs/CHARTER.md` | Full scope, evaluation criteria, decision rules |
 | `docs/DATA_NOTES.md` | Data quality audit findings, physical bounds tables |
+
+---
+
+## Protected invariants — do NOT "simplify" (each looks redundant; each fixes a real bug)
+1. `pd.read_csv(..., index_col=False)` in src/data_loading.py,
+   scripts/audit_carobd.py, src/live/replay_source.py, plus the
+   `_assert_physical_bounds` guard: ~120 carOBD files carry a trailing comma;
+   bare read_csv silently shifts every column. Removing this reintroduces
+   scrambled training data.
+2. `df.apply(pd.to_numeric, errors="coerce")` in the loader (live16.csv has a
+   stray ' ' cell that object-types a whole column).
+3. In src/dashboard/inference.py `_run_window`: the split between `feats`
+   (NaN-preserved, classifier) and `feats_for_physics` (baseline-filled,
+   severity/forecaster/anomaly). XGBoost must receive NaN — mean-filling
+   produced a 97% air_system false positive on a real healthy MAF car;
+   IsolationForest raises on NaN. Never merge these paths.
+4. The Untested-fault contract, all pieces: FAULT_REQUIRED_PIDS in
+   src/eval/pid_availability.py (TPS requires BOTH pedal channels), the
+   alerter suppression (`alerter_label = "healthy"` when the label is
+   untested), the carryover of `label_untested`/`untested_faults` in BOTH
+   between-windows DashboardState constructors, `session_untested_faults` on
+   the engine, and the report consuming the ENGINE set (not the last state).
+5. src/eval/session_report.py logic: 20% baseline exclusion, physics-severity
+   95th percentile (never the forecaster), the "inconclusive" rule for
+   ~0-severity label dominance, the min-evaluable-windows floor, caveat text.
+6. Session-level train/test split invariant and its regression test.
+7. src/live/app_csv.py is the SHARED adapter core for scripts/adapt_app_csv.py
+   AND src/dashboard/streamer.py (PEDAL_D/PEDAL_E/INTAKE_AIR_TEMP rename +
+   1 Hz resample). Do not inline or duplicate — divergence here caused
+   phantom TPS faults.
+8. `_TARGET_FPS` / `_rows_per_tick` render throttle in app.py: reverting to
+   one-row-per-rerun reintroduces unreadable flashing at 50x replay.
+9. xgb_classifier.train: class-balance sample weights + fuel_downweight flag.
+10. The 83-feature contract (names/count), models/*.pkl, results/*.json: frozen.
