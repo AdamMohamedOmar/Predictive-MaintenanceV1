@@ -241,6 +241,10 @@ class InferenceEngine:
         # Per-window record for the end-of-read session report (CSV mode). Each
         # entry: {elapsed_s, label, severities}. Cleared on reset().
         self._window_history: list[dict] = []
+        # Union of untested faults seen across the session — the report reads
+        # THIS, not the last DashboardState (which may be a between-windows
+        # snapshot that predates any window run).
+        self._session_untested: set[str] = set()
         # Actual ECU poll rate — 1.0 for CSV replay (carOBD is 1 Hz); updated
         # each live tick via set_sample_hz() so rate-dependent features are correct.
         # After T3.1 the resampler ensures the buffer always sees 1-Hz rows,
@@ -332,6 +336,8 @@ class InferenceEngine:
                 data_quality_ok=False,
                 data_quality_violations=verdict.violations,
                 anomaly_score=prev.anomaly_score,
+                label_untested=prev.label_untested,
+                untested_faults=list(prev.untested_faults),
             )
             return
 
@@ -386,6 +392,8 @@ class InferenceEngine:
                 data_quality_ok=True,
                 data_quality_violations=[],
                 anomaly_score=prev.anomaly_score,
+                label_untested=prev.label_untested,
+                untested_faults=list(prev.untested_faults),
             )
 
     def reset(self) -> None:
@@ -398,6 +406,7 @@ class InferenceEngine:
         self._last_state = _initial_state()
         self._nan_warned.clear()
         self._window_history.clear()
+        self._session_untested.clear()
         self._next_sample_t = None  # T3.1: restart resampler clock on session change
 
     def set_sample_hz(self, hz: float) -> None:
@@ -426,6 +435,11 @@ class InferenceEngine:
     def window_history(self) -> list[dict]:
         """Per-window records (elapsed_s, label, severities) for the session report."""
         return self._window_history
+
+    @property
+    def session_untested_faults(self) -> set[str]:
+        """Union of untested faults observed across this session (for the report)."""
+        return set(self._session_untested)
 
     @property
     def degraded_pid_count(self) -> int:
@@ -525,6 +539,7 @@ class InferenceEngine:
         # phantom fault (the 95.9%-air_system case). The raw label is preserved
         # in all_class_probs for transparency and flagged via label_untested.
         untested = untested_faults(available_pids(window_df))
+        self._session_untested.update(untested)
         label_untested = label in untested
         alerter_label = "healthy" if label_untested else label
 

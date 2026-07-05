@@ -55,6 +55,18 @@ def test_insufficient_data_floor():
     assert rep.verdict.startswith("INSUFFICIENT DATA")
 
 
+def test_zero_severity_dominance_is_inconclusive_not_detected():
+    """Label dominance with ~0 physics severity (missing-PID artifact) must not
+    read as a fault — regression for 'DETECTED, severity 0%' on the Yaris."""
+    recs = [_rec(t, "healthy") for t in range(20)]
+    recs += [_rec(t, "throttle_position_sensor") for t in range(20, 100)]  # sev 0.0
+    rep = build_session_report(recs, set())
+    tps = next(f for f in rep.faults if f.fault == "throttle_position_sensor")
+    assert tps.status == "inconclusive"
+    assert tps.severity_pct is None
+    assert "FAULT" not in rep.verdict  # inconclusive never drives the verdict
+
+
 def test_severity_is_95th_percentile_not_max():
     # one spike shouldn't dominate; 95th percentile of mostly-0.3 with a 0.9 spike
     recs = [_rec(t, "healthy") for t in range(20)]

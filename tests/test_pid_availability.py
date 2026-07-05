@@ -49,11 +49,18 @@ def test_missing_coolant_untests_two_faults():
     assert "coolant_temp_sensor" in ut
 
 
-def test_throttle_needs_both_channels():
-    # only THROTTLE present, COMMANDED_THROTTLE_ACTUATOR missing -> untested
+def test_throttle_needs_pedals_and_both_throttle_channels():
+    # missing COMMANDED_THROTTLE_ACTUATOR -> untested, and it names the lack
     df = _df(set(USEFUL_PIDS) - {"COMMANDED_THROTTLE_ACTUATOR"})
     ut = untested_faults(available_pids(df))
     assert ut.get("throttle_position_sensor") == ["COMMANDED_THROTTLE_ACTUATOR"]
+    # missing BOTH pedal channels -> untested too (THROTTLE_TO_PEDAL_RATIO
+    # would be fabricated -> phantom TPS fault)
+    df2 = _df(set(USEFUL_PIDS) - {
+        "ACCELERATOR_PEDAL_POSITION_D", "ACCELERATOR_PEDAL_POSITION_E"})
+    ut2 = untested_faults(available_pids(df2))
+    assert set(ut2.get("throttle_position_sensor", [])) == {
+        "ACCELERATOR_PEDAL_POSITION_D", "ACCELERATOR_PEDAL_POSITION_E"}
 
 
 def test_healthy_always_evaluable():

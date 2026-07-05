@@ -1045,6 +1045,9 @@ def _render_session_report(report) -> None:
             elif fr.status == "detected":
                 status_txt, scolor = "DETECTED", ACCENT_ALERT
                 detail = f"severity {fr.severity_pct:.0f}%"
+            elif fr.status == "inconclusive":
+                status_txt, scolor = "INCONCLUSIVE", "#C9A227"
+                detail = f"{fr.window_share_pct:.0f}% label share, ~0 severity"
             else:
                 status_txt, scolor, detail = "HEALTHY", "#3FB27F", ""
             st.markdown(
@@ -1187,12 +1190,12 @@ def main() -> None:
                     if is_csv:
                         from src.eval.session_report import build_session_report
 
-                        _last = st.session_state.latest_state
-                        _untested = set(
-                            getattr(_last, "untested_faults", []) or []
-                        )
+                        # Session-level untested set from the ENGINE — the last
+                        # DashboardState can be a between-windows snapshot with
+                        # an empty list, which previously let air_system count
+                        # as evaluable ("DETECTED, severity 0%").
                         st.session_state.session_report = build_session_report(
-                            engine.window_history, _untested
+                            engine.window_history, engine.session_untested_faults
                         )
                     break
                 else:

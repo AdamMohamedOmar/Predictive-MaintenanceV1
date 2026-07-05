@@ -30,7 +30,16 @@ FAULT_REQUIRED_PIDS: dict[str, set[str]] = {
     "air_system": {"INTAKE_MANIFOLD_PRESSURE"},  # speed-density signature dies without MAP
     "fuel_system": {"LONG_TERM_FUEL_TRIM_BANK_1"},  # LTFT is the primary fuel signal
     "coolant_temp_sensor": {"COOLANT_TEMPERATURE"},
-    "throttle_position_sensor": {"THROTTLE", "COMMANDED_THROTTLE_ACTUATOR"},  # divergence needs both
+    # TPS detection rests on reported-vs-commanded divergence AND the
+    # THROTTLE_TO_PEDAL_RATIO feature — the pedal channels are load-bearing.
+    # A car missing pedals gets a fabricated ratio, which classifies as a
+    # phantom TPS fault (observed: "DETECTED, severity 0%" on missing pedals).
+    "throttle_position_sensor": {
+        "THROTTLE",
+        "COMMANDED_THROTTLE_ACTUATOR",
+        "ACCELERATOR_PEDAL_POSITION_D",
+        "ACCELERATOR_PEDAL_POSITION_E",
+    },
 }
 
 

@@ -147,8 +147,14 @@ def build_session_report(
         if share >= detect_fraction * 100.0:
             sev_vals = [r["severities"].get(fault, 0.0) for r in evaluable]
             sev_pct = round(_percentile(sev_vals, 95.0) * 100.0, 1)
-            faults.append(FaultReport(fault, "detected", sev_pct, round(share, 1)))
-            any_detected = True
+            if sev_pct < 1.0:
+                # Label dominance with ~zero physical severity is the signature
+                # of a missing-PID / feature artifact, not a physical fault —
+                # report it as inconclusive rather than "DETECTED, severity 0%".
+                faults.append(FaultReport(fault, "inconclusive", None, round(share, 1)))
+            else:
+                faults.append(FaultReport(fault, "detected", sev_pct, round(share, 1)))
+                any_detected = True
         else:
             faults.append(FaultReport(fault, "healthy", None, round(share, 1)))
 
