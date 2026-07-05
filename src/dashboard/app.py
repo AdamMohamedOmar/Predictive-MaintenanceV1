@@ -5,19 +5,23 @@ Run with:
 
 Layout (top to bottom)
 -----------------------
-  Sidebar      — file selector, speed slider, play/pause, reset
+  Sidebar      — source select (CSV/live), file picker, speed, play/pause/reset
+  EOF report   — end-of-read health verdict (CSV mode; renders above everything
+                 once the file is exhausted — it is the product's verdict)
   Status banner— full-width colour-coded alert status
-  Severity grid— 4 fault columns (current + 60s forecast)
+  Severity strip— 4 fault columns, current physics severity only (no forecast)
   PID strip    — 4 live sensor channels over a rolling 5-min window
   Alert log    — timestamped ML + rule-engine events
   SHAP panel   — top-5 features driving the current prediction
 
 Loop design
 -----------
-Each Streamlit rerun advances exactly ONE simulated second (one row).
-After rendering, the script calls st.rerun() after sleeping 1/speed
-seconds — so at speed=10 we advance 10 rows per real second.
-This gives smooth animation without batching.
+Each Streamlit rerun advances _rows_per_tick(speed) simulated seconds and
+repaints ONCE, so the render cadence stays near _TARGET_FPS regardless of
+playback speed (at 50x we advance 10 rows per tick instead of repainting
+50 times a second — see the protected render-throttle invariant).
+After rendering, the script sleeps so the effective row rate equals the
+chosen speed, then calls st.rerun().
 
 @st.cache_resource
 ------------------
@@ -349,6 +353,16 @@ def _render_sidebar(engine: InferenceEngine | None) -> float:
 # ── Panel renderers ───────────────────────────────────────────────────────────
 
 
+def _render_placeholder(text: str) -> None:
+    """Uniform terminal-style placeholder for warming-up / empty panel states."""
+    st.markdown(
+        f'<div class="panel-card" style="font-family:{FONT_MONO};'
+        f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
+        f"// {text}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def _section_header(title: str) -> None:
     """Render a thin section label in Saira Condensed with a left accent bar."""
     st.markdown(
@@ -580,7 +594,6 @@ def _render_status_banner(state: DashboardState) -> None:
     st.markdown(banner_html, unsafe_allow_html=True)
 
 
-
 def _render_pid_strip(history: deque) -> None:
     """2×2 grid of dark sparkline cards — each shows a large live value + rolling plot.
 
@@ -608,7 +621,7 @@ def _render_pid_strip(history: deque) -> None:
                     f'<div class="panel-card" style="height:96px;display:flex;'
                     f'align-items:center;justify-content:center;">'
                     f'<span style="font-family:{FONT_MONO};color:{TEXT_MUTED};font-size:12px;">'
-                    f"{label} — press Play</span></div>",
+                    f"// {label} — press Play</span></div>",
                     unsafe_allow_html=True,
                 )
         return
@@ -686,12 +699,7 @@ def _render_pid_strip(history: deque) -> None:
 def _render_alert_log(log_entries: list) -> None:
     """Diagnostic terminal feed — monospace, color-coded, time-prefixed rows."""
     if not log_entries:
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// no alerts yet</div>",
-            unsafe_allow_html=True,
-        )
+        _render_placeholder("no alerts yet")
         return
 
     rows_html = ""
@@ -800,12 +808,7 @@ def _render_shap_panel(state: DashboardState) -> None:
     import plotly.graph_objects as go
 
     if not state.top_features:
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// available after first 60-second window</div>",
-            unsafe_allow_html=True,
-        )
+        _render_placeholder("available after first 60-second window")
         return
 
     # Title strip — label + confidence in Saira Condensed
@@ -979,17 +982,21 @@ def _render_session_report(report) -> None:
     else:
         vcolor = TEXT_SECONDARY  # INSUFFICIENT DATA
 
+    # Accent strip on top mirrors the status banner's design language and makes
+    # the verdict the visually dominant element once the read is complete.
     st.markdown(
         f'<div style="border:1px solid {BORDER_STRONG};border-radius:10px;'
-        f'padding:16px 18px;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'overflow:hidden;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'<div style="height:3px;background:{vcolor};box-shadow:0 0 20px {vcolor}60;"></div>'
+        f'<div style="padding:16px 18px;">'
         f'<div style="font-family:{FONT_DISPLAY};font-size:11px;letter-spacing:0.12em;'
         f'text-transform:uppercase;color:{TEXT_SECONDARY};">End-of-Read Health Report</div>'
-        f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+        f'<div style="font-family:{FONT_MONO};font-size:26px;font-weight:700;'
         f'color:{vcolor};margin-top:6px;">{v}</div>'
         f'<div style="font-family:{FONT_BODY};font-size:11px;color:{TEXT_MUTED};'
         f'margin-top:4px;">{report.n_evaluable_windows} evaluable · '
         f'{report.n_baseline_windows} baseline (excluded) · '
-        f'{report.n_untested_windows} untested windows</div></div>',
+        f'{report.n_untested_windows} untested windows</div></div></div>',
         unsafe_allow_html=True,
     )
 
