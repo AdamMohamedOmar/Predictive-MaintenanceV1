@@ -1,14 +1,12 @@
 """Test if classifier detects EARLY-RAMP faults (which it never trained on)."""
 from pathlib import Path
-import numpy as np
 import pandas as pd
 import pickle
-from sklearn.metrics import f1_score
 
 from src.config import DATA_CAROBD_DIR, RANDOM_SEED
 from src.data_loading import list_usable_files, load_carobd_csv
-from src.features.extractor import extract_features, feature_names
-from src.features.normalizer import BaselineNormalizer, normalised_feature_names
+from src.features.extractor import extract_features
+from src.features.normalizer import normalised_feature_names
 from src.features.windowing import sliding_windows
 from src.injection import inject_session
 from src.models.classifier import ALL_LABELS

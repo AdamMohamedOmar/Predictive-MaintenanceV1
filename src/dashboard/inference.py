@@ -47,7 +47,7 @@ from typing import Optional
 import pandas as pd
 
 from src.config import MODELS_DIR, WINDOW_LENGTH_S, WINDOW_STRIDE_S
-from src.diagnostics.cold_start_checker import ColdStartAlert, ColdStartChecker
+from src.diagnostics.cold_start_checker import ColdStartChecker
 from src.eval.pid_availability import available_pids, untested_faults
 from src.features.extractor import extract_features, feature_names
 from src.features.severity import compute_severity

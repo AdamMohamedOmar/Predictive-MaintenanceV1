@@ -1,6 +1,6 @@
 """Tests for StableAlerter temporal voting filter."""
 import pytest
-from src.models.stable_alerter import StableAlerter, AlertState
+from src.models.stable_alerter import StableAlerter
 
 
 # ---------------------------------------------------------------------------

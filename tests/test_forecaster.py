@@ -343,7 +343,6 @@ def test_feature_means_returns_copy_not_reference():
 
 def test_normalizer_save_load_roundtrip_checks_feature_order(tmp_path):
     """Saving with v2 format and loading detects a feature-order mismatch."""
-    import importlib
     from src.features.normalizer import BaselineNormalizer, _FEAT_COLS
 
     rng = np.random.default_rng(13)

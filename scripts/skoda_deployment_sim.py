@@ -8,8 +8,6 @@ This is what the Skoda workflow looks like:
 
 Question: does the classifier's reliance on RAW absolute features break this?
 """
-import numpy as np
-import pandas as pd
 import pickle
 from sklearn.metrics import f1_score, classification_report
 

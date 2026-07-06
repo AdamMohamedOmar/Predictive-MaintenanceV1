@@ -5,19 +5,23 @@ Run with:
 
 Layout (top to bottom)
 -----------------------
-  Sidebar      — file selector, speed slider, play/pause, reset
+  Sidebar      — source select (CSV/live), file picker, speed, play/pause/reset
+  EOF report   — end-of-read health verdict (CSV mode; renders above everything
+                 once the file is exhausted — it is the product's verdict)
   Status banner— full-width colour-coded alert status
-  Severity grid— 4 fault columns (current + 60s forecast)
+  Severity strip— 4 fault columns, current physics severity only (no forecast)
   PID strip    — 4 live sensor channels over a rolling 5-min window
   Alert log    — timestamped ML + rule-engine events
   SHAP panel   — top-5 features driving the current prediction
 
 Loop design
 -----------
-Each Streamlit rerun advances exactly ONE simulated second (one row).
-After rendering, the script calls st.rerun() after sleeping 1/speed
-seconds — so at speed=10 we advance 10 rows per real second.
-This gives smooth animation without batching.
+Each Streamlit rerun advances _rows_per_tick(speed) simulated seconds and
+repaints ONCE, so the render cadence stays near _TARGET_FPS regardless of
+playback speed (at 50x we advance 10 rows per tick instead of repainting
+50 times a second — see the protected render-throttle invariant).
+After rendering, the script sleeps so the effective row rate equals the
+chosen speed, then calls st.rerun().
 
 @st.cache_resource
 ------------------
@@ -46,7 +50,6 @@ import pandas as pd
 import serial.tools.list_ports
 import streamlit as st
 
-from src.config import MODELS_DIR, USEFUL_PIDS
 from src.dashboard.inference import DashboardState, InferenceEngine
 from src.dashboard.streamer import CsvStreamer
 from src.dashboard.styles import inject_global_styles
@@ -67,11 +70,11 @@ from src.dashboard.theme import (
     FONT_DISPLAY,
     FONT_BODY,
     FONT_MONO,
-    state_accent,
+    SEVERITY_OK,
+    SEVERITY_CAUTION,
+    severity_color,
 )
 from src.live.obd_source import LiveObdSource
-from src.models.classifier import ALL_LABELS
-from src.models.forecaster import FAULT_TYPES
 
 # ── Page-level config (must be first Streamlit call) ─────────────────────────
 
@@ -121,17 +124,16 @@ def _hex_with_alpha(hex_color: str, alpha: float) -> str:
 
 
 @st.cache_resource
-def _load_engine(normalizer_path: str | None = None) -> InferenceEngine | None:
+def _load_engine() -> InferenceEngine | None:
     """Load XGBoost + SHAP + FaultForecaster.  Returns None if models missing.
 
-    Keyed by normalizer_path so switching baselines (Etios → Skoda) rebuilds
-    the engine once and then caches the new instance.
+    The dashboard always runs the bundled training-baseline normalizer.
+    Per-vehicle normalizers are consumed through
+    InferenceEngine(normalizer_override=...) by scripts/score_recording.py
+    and the FastAPI car flow — not through this UI.
     """
     try:
-        from pathlib import Path
-
-        override = Path(normalizer_path) if normalizer_path else None
-        return InferenceEngine(normalizer_override=override)
+        return InferenceEngine()
     except FileNotFoundError:
         return None
 
@@ -144,13 +146,11 @@ def _init_session_state() -> None:
         "source_type": "csv",  # "csv" | "live"
         "streamer": None,  # CsvStreamer | None  (csv mode)
         "live_source": None,  # LiveObdSource | None  (live mode)
-        "normalizer_path": None,  # str | None — path to active normalizer pkl
         "playing": False,
         "pid_history": deque(maxlen=_HISTORY_LEN),
         "latest_state": None,  # DashboardState | None
         "alert_log": [],  # list[str]  — timestamped event strings
         "last_active_fault": "",  # track transitions for alert log
-        "vehicle_id": "",  # VIN, plate, or shop job number
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -160,8 +160,8 @@ def _init_session_state() -> None:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 
-def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
-    """Render controls.  Returns (normalizer_path, speed).  Handles all interactions."""
+def _render_sidebar(engine: InferenceEngine | None) -> float:
+    """Render controls.  Returns the playback speed.  Handles all interactions."""
     st.sidebar.markdown(
         f'<div style="font-family:{FONT_DISPLAY};font-size:0.75rem;text-transform:uppercase;'
         f'letter-spacing:0.1em;color:{TEXT_MUTED};padding:4px 0 8px 0;">'
@@ -170,17 +170,6 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         f"Session Controls</div>",
         unsafe_allow_html=True,
     )
-
-    # ── Vehicle ID ────────────────────────────────────────────────────────────
-    vehicle_id = st.sidebar.text_input(
-        "VIN / Plate / Job#",
-        value=st.session_state.vehicle_id,
-        max_chars=30,
-        placeholder="e.g. VSSZZZ6KZ7R123456",
-    )
-    st.session_state.vehicle_id = vehicle_id.strip()
-
-    st.sidebar.divider()
 
     # ── Source selector ───────────────────────────────────────────────────────
     source_type = st.sidebar.radio(
@@ -201,32 +190,13 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
 
     st.sidebar.divider()
 
-    # ── Normalizer picker (shared by both modes) ──────────────────────────────
-    norm_files = sorted(MODELS_DIR.glob("*_normalizer.pkl"))
-    norm_options = ["Built-in (training baseline)"] + [p.name for p in norm_files]
-    norm_index = st.sidebar.selectbox("Normalizer", norm_options, index=0)
-    if norm_index == "Built-in (training baseline)":
-        normalizer_path = None
-    else:
-        normalizer_path = str(MODELS_DIR / norm_index)
-
-    # Warn if live mode selected but no vehicle normalizer exists
-    if new_source_type == "live" and not norm_files:
-        st.sidebar.warning(
-            "No vehicle normalizer found.  Run:\n"
-            "`python -m scripts.live_baseline_capture`"
-        )
-
-    # Store normalizer choice so main() can key the engine cache
-    st.session_state.normalizer_path = normalizer_path
-
     speed = 1.0  # default; overridden in CSV section below
 
     # ── CSV mode controls ─────────────────────────────────────────────────────
     if new_source_type == "csv":
         if not _DATA_DIR.exists():
             st.sidebar.error(f"Data directory not found:\n{_DATA_DIR}")
-            return normalizer_path, 1.0
+            return 1.0
 
         # Demo fault files (data/demo/) listed first — they're pre-injected
         # so you see fault detection immediately.  Raw carOBD files follow.
@@ -235,7 +205,7 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         csv_files = demo_files + raw_files
         if not csv_files:
             st.sidebar.warning("No CSV files found. Run scripts/generate_demo_data.py first.")
-            return normalizer_path, 1.0
+            return 1.0
 
         file_labels = (
             [f"[DEMO] {p.name}" for p in demo_files]
@@ -377,10 +347,20 @@ def _render_sidebar(engine: InferenceEngine | None) -> tuple[str | None, float]:
         else:
             st.sidebar.info("Not connected.  Press Connect to start.")
 
-    return normalizer_path, speed
+    return speed
 
 
 # ── Panel renderers ───────────────────────────────────────────────────────────
+
+
+def _render_placeholder(text: str) -> None:
+    """Uniform terminal-style placeholder for warming-up / empty panel states."""
+    st.markdown(
+        f'<div class="panel-card" style="font-family:{FONT_MONO};'
+        f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
+        f"// {text}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _section_header(title: str) -> None:
@@ -614,7 +594,6 @@ def _render_status_banner(state: DashboardState) -> None:
     st.markdown(banner_html, unsafe_allow_html=True)
 
 
-
 def _render_pid_strip(history: deque) -> None:
     """2×2 grid of dark sparkline cards — each shows a large live value + rolling plot.
 
@@ -642,7 +621,7 @@ def _render_pid_strip(history: deque) -> None:
                     f'<div class="panel-card" style="height:96px;display:flex;'
                     f'align-items:center;justify-content:center;">'
                     f'<span style="font-family:{FONT_MONO};color:{TEXT_MUTED};font-size:12px;">'
-                    f"{label} — press Play</span></div>",
+                    f"// {label} — press Play</span></div>",
                     unsafe_allow_html=True,
                 )
         return
@@ -720,12 +699,7 @@ def _render_pid_strip(history: deque) -> None:
 def _render_alert_log(log_entries: list) -> None:
     """Diagnostic terminal feed — monospace, color-coded, time-prefixed rows."""
     if not log_entries:
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// no alerts yet</div>",
-            unsafe_allow_html=True,
-        )
+        _render_placeholder("no alerts yet")
         return
 
     rows_html = ""
@@ -834,12 +808,7 @@ def _render_shap_panel(state: DashboardState) -> None:
     import plotly.graph_objects as go
 
     if not state.top_features:
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// available after first 60-second window</div>",
-            unsafe_allow_html=True,
-        )
+        _render_placeholder("available after first 60-second window")
         return
 
     # Title strip — label + confidence in Saira Condensed
@@ -1009,21 +978,25 @@ def _render_session_report(report) -> None:
     if v.startswith("DEVELOPING"):
         vcolor = ACCENT_ALERT
     elif v.startswith("HEALTHY"):
-        vcolor = "#3FB27F"
+        vcolor = SEVERITY_OK
     else:
         vcolor = TEXT_SECONDARY  # INSUFFICIENT DATA
 
+    # Accent strip on top mirrors the status banner's design language and makes
+    # the verdict the visually dominant element once the read is complete.
     st.markdown(
         f'<div style="border:1px solid {BORDER_STRONG};border-radius:10px;'
-        f'padding:16px 18px;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'overflow:hidden;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'<div style="height:3px;background:{vcolor};box-shadow:0 0 20px {vcolor}60;"></div>'
+        f'<div style="padding:16px 18px;">'
         f'<div style="font-family:{FONT_DISPLAY};font-size:11px;letter-spacing:0.12em;'
         f'text-transform:uppercase;color:{TEXT_SECONDARY};">End-of-Read Health Report</div>'
-        f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+        f'<div style="font-family:{FONT_MONO};font-size:26px;font-weight:700;'
         f'color:{vcolor};margin-top:6px;">{v}</div>'
         f'<div style="font-family:{FONT_BODY};font-size:11px;color:{TEXT_MUTED};'
         f'margin-top:4px;">{report.n_evaluable_windows} evaluable · '
         f'{report.n_baseline_windows} baseline (excluded) · '
-        f'{report.n_untested_windows} untested windows</div></div>',
+        f'{report.n_untested_windows} untested windows</div></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -1046,10 +1019,10 @@ def _render_session_report(report) -> None:
                 status_txt, scolor = "DETECTED", ACCENT_ALERT
                 detail = f"severity {fr.severity_pct:.0f}%"
             elif fr.status == "inconclusive":
-                status_txt, scolor = "INCONCLUSIVE", "#C9A227"
+                status_txt, scolor = "INCONCLUSIVE", SEVERITY_CAUTION
                 detail = f"{fr.window_share_pct:.0f}% label share, ~0 severity"
             else:
-                status_txt, scolor, detail = "HEALTHY", "#3FB27F", ""
+                status_txt, scolor, detail = "HEALTHY", SEVERITY_OK, ""
             st.markdown(
                 f'<div style="padding:6px 2px;">'
                 f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
@@ -1099,12 +1072,7 @@ def _render_severity_strip(state: DashboardState) -> None:
             else:
                 sev = float(state.severities.get(fault, 0.0))
                 pct = max(0, min(100, int(round(sev * 100))))
-                if sev >= 0.66:
-                    color = ACCENT_ALERT
-                elif sev >= 0.33:
-                    color = "#C9A227"  # amber
-                else:
-                    color = "#3FB27F"  # green
+                color = severity_color(sev)
                 body = (
                     f'<div style="height:8px;border-radius:4px;background:{BORDER};'
                     f'overflow:hidden;margin-top:10px;">'
@@ -1143,11 +1111,8 @@ def main() -> None:
 
     st.title("Predictive Maintenance — Live OBD-II Dashboard")
 
-    # Load engine keyed by current normalizer; sidebar may update it this rerun
-    engine = _load_engine(st.session_state.normalizer_path)
-    _normalizer_path, speed = _render_sidebar(engine)
-    # Reload after sidebar in case normalizer selectbox changed (cache hit if unchanged)
-    engine = _load_engine(st.session_state.normalizer_path)
+    engine = _load_engine()
+    speed = _render_sidebar(engine)
 
     if engine is None:
         st.error(

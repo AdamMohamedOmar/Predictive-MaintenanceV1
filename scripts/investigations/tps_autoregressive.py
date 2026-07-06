@@ -1,9 +1,8 @@
 """Test: does current-window severity predict future severity for TPS?"""
 import pandas as pd
-import numpy as np
 from sklearn.metrics import mean_absolute_error
 
-from src.features.normalizer import BaselineNormalizer, normalised_feature_names
+from src.features.normalizer import BaselineNormalizer
 from src.features.dataset_builder import load_dataset
 from src.models.classifier import session_split, _HELD_OUT_SESSIONS
 from src.features.severity import compute_baselines

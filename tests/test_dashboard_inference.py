@@ -11,7 +11,6 @@ classifier will consistently predict 'healthy' once the buffer warms up.
 import math
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from src.dashboard.inference import DashboardState, InferenceEngine, _initial_state

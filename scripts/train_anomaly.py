@@ -42,7 +42,6 @@ from src.config import DATA_SYNTHETIC_DIR, MODELS_DIR, RESULTS_DIR, USEFUL_PIDS,
 from src.features.dataset_builder import load_dataset
 from src.features.extractor import extract_features
 from src.features.normalizer import BaselineNormalizer
-from src.features.windowing import sliding_windows
 from src.models.anomaly import AnomalyDetector, FAULT_BEARING_FEATURES
 from src.models.classifier import session_split
 

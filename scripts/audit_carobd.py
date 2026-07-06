@@ -8,11 +8,13 @@ Produces two pieces of evidence used elsewhere in the project:
 Run from the repo root:
     python scripts/audit_carobd.py
 
-The output of this script is the basis for the USABLE_CAROBD_FILES set in
-src/data_loading.py and the audit findings documented in docs/DATA_NOTES.md.
+The output of this script is the basis for the audit findings documented in
+docs/DATA_NOTES.md. The former USABLE_CAROBD_FILES whitelist was removed after
+the trailing-comma parse fix (index_col=False): all 129 files now pass, and
+src.data_loading.list_usable_files() validates files dynamically instead.
 
-If the carOBD data is updated or replaced, re-run this script and update
-USABLE_CAROBD_FILES accordingly.
+If the carOBD data is updated or replaced, re-run this script to confirm every
+file still parses aligned and within physical bounds.
 """
 
 from pathlib import Path

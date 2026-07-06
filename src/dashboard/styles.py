@@ -10,8 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from src.dashboard.theme import (
-    ACCENT_DATA, ACCENT_OK, ACCENT_WARN, ACCENT_ALERT,
-    BG_BASE, BG_SURFACE, BG_RAISED,
+    ACCENT_DATA, BG_BASE, BG_SURFACE, BG_RAISED,
     BORDER, BORDER_STRONG,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     FONT_DISPLAY, FONT_BODY, FONT_MONO,

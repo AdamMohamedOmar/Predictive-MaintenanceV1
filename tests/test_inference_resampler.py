@@ -34,7 +34,6 @@ def _make_row(rpm: float = 900.0) -> dict:
 @pytest.fixture
 def engine(tmp_path, monkeypatch):
     """Return an InferenceEngine with model loading mocked out."""
-    import types
     import numpy as np
     from unittest.mock import MagicMock
     from src.dashboard import inference as inf_module

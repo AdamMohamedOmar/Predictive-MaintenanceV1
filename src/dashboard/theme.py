@@ -29,16 +29,6 @@ ACCENT_WARN  = "#F59E0B"   # cold_start, warming-up, suspected fault — amber
 ACCENT_ALERT = "#EF4444"   # confirmed fault active — red
 ACCENT_INFO  = "#60A5FA"   # informational states (connecting, warming up) — blue
 
-# ── State → accent mapping (used in status banner + gauges) ──────────────────
-
-def state_accent(is_fault: bool, is_suspected: bool, is_coldstart: bool) -> str:
-    """Return the appropriate accent hex for the current machine state."""
-    if is_fault:
-        return ACCENT_ALERT
-    if is_suspected or is_coldstart:
-        return ACCENT_WARN
-    return ACCENT_OK
-
 # ── Typography ────────────────────────────────────────────────────────────────
 
 # Google Fonts loaded by inject_global_styles() in styles.py
@@ -46,16 +36,21 @@ FONT_DISPLAY = "'Saira Condensed', sans-serif"    # headings, status title, sect
 FONT_BODY    = "'Outfit', system-ui, sans-serif"  # paragraphs, captions, body text
 FONT_MONO    = "'JetBrains Mono', ui-monospace, monospace"  # ALL numeric readouts, log lines
 
-# ── Severity tier thresholds ──────────────────────────────────────────────────
+# ── Severity tiers (severity strip + end-of-read report) ─────────────────────
 
-SEV_LOW_THRESH  = 0.30   # below → ACCENT_OK
-SEV_MID_THRESH  = 0.60   # below → ACCENT_WARN; above → ACCENT_ALERT
+# Deliberately softer than ACCENT_OK / ACCENT_WARN: these colour steady-state
+# status readouts (bars, verdict text), not attention-demanding alerts.
+SEVERITY_OK      = "#3FB27F"   # green — severity near 0, healthy verdicts
+SEVERITY_CAUTION = "#C9A227"   # amber — mid severity, inconclusive verdicts
+
+SEV_CAUTION_THRESH = 0.33   # at/above → SEVERITY_CAUTION
+SEV_ALERT_THRESH   = 0.66   # at/above → ACCENT_ALERT
 
 
 def severity_color(severity: float) -> str:
-    """Map a [0, 1] severity to the correct accent color."""
-    if severity < SEV_LOW_THRESH:
-        return ACCENT_OK
-    if severity < SEV_MID_THRESH:
-        return ACCENT_WARN
-    return ACCENT_ALERT
+    """Map a [0, 1] severity to the severity-strip tier colour."""
+    if severity >= SEV_ALERT_THRESH:
+        return ACCENT_ALERT
+    if severity >= SEV_CAUTION_THRESH:
+        return SEVERITY_CAUTION
+    return SEVERITY_OK

@@ -9,7 +9,7 @@ import xgboost as xgb
 from pathlib import Path
 from sklearn.metrics import mean_absolute_error
 
-from src.config import DATA_CAROBD_DIR, DATA_SYNTHETIC_DIR, FORECAST_HORIZON_S, WINDOW_STRIDE_S, RANDOM_SEED
+from src.config import DATA_CAROBD_DIR, FORECAST_HORIZON_S, WINDOW_STRIDE_S, RANDOM_SEED
 from src.data_loading import list_usable_files, load_carobd_csv
 from src.features.extractor import extract_features, feature_names
 from src.features.windowing import sliding_windows

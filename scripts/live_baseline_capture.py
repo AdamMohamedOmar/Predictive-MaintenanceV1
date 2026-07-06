@@ -301,7 +301,7 @@ def run_capture(
 
     print(f"\n[OK] Baseline saved:")
     print(f"     Normaliser : {out_path}")
-    print(f"     Metadata   : {meta_path}")
+    print(f"     Metadata   : {out_path.with_suffix('.json')}")
     print(f"     Windows    : {meta['n_windows']}  |  Vehicle: {meta['vehicle']}")
     print(f"\n  Next step: launch the dashboard and select this normaliser.")
     return 0

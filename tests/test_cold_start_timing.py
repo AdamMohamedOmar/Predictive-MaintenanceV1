@@ -4,7 +4,6 @@ At 0.3 Hz the rule "frozen ECT after 90 s" must fire after ≥ 90 real
 seconds, NOT after 90 row-counting steps.
 """
 
-import pytest
 from src.diagnostics.cold_start_checker import ColdStartChecker
 
 

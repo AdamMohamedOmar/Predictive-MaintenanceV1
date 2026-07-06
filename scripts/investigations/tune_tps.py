@@ -1,6 +1,5 @@
 """Find TPS hyperparams that generalise across drive regimes."""
 import pandas as pd
-import numpy as np
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error
 

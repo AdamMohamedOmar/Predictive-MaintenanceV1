@@ -57,7 +57,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-from src.config import MODELS_DIR
 
 
 def _adapt(raw_csv: Path, mapping_path: Path | None, rate_hz: float, out_dir: Path) -> Path:

@@ -33,7 +33,6 @@ differs from what we call it in our canonical PID set.
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import obd
 from obd import OBDResponse

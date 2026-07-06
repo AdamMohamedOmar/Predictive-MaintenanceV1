@@ -34,7 +34,6 @@ from src.features.extractor import extract_features, feature_names
 from src.features.severity import compute_severity
 from src.features.windowing import sliding_windows
 from src.injection import inject_session
-from src.injection.fault_injector import _DEFAULT_MAGNITUDE
 
 log = logging.getLogger(__name__)
 

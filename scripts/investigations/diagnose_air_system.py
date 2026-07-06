@@ -18,12 +18,10 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import numpy as np
-import pandas as pd
 
 from src.features.dataset_builder import load_dataset
 from src.features.normalizer import normalised_feature_names
-from src.models.classifier import session_split, _HELD_OUT_SESSIONS
+from src.models.classifier import session_split
 from src.models.xgb_classifier import load_model
 
 # ── Load data & model ─────────────────────────────────────────────────────────

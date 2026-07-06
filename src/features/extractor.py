@@ -92,8 +92,6 @@ def extract_features(window: pd.DataFrame, sample_hz: float = 1.0) -> dict[str, 
         features[f"{pid}__delta"] = float(col[-1] - col[0])
 
     # Cross-PID ratio features
-    throttle_mean = features["THROTTLE__mean"]
-    pedal_mean    = features["ACCELERATOR_PEDAL_POSITION_D__mean"]
     map_mean      = features["INTAKE_MANIFOLD_PRESSURE__mean"]
     ltft_mean     = features["LONG_TERM_FUEL_TRIM_BANK_1__mean"]
     stft_mean     = features["SHORT_TERM_FUEL_TRIM_BANK_1__mean"]

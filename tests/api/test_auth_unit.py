@@ -36,8 +36,13 @@ def test_token_is_string():
 
 def test_tampered_token_raises():
     token = make_token(99)
-    # Flip the last character to corrupt the signature
-    corrupted = token[:-1] + ("A" if token[-1] != "A" else "B")
+    # Corrupt the FIRST signature character, not the last: a 32-byte HS256
+    # signature is 43 base64url chars, and the decoder discards the low 2 bits
+    # of the final char — so an A<->B flip there can decode to the identical
+    # signature and (time-dependently, ~6% of runs) raise nothing.
+    header, payload, sig = token.split(".")
+    corrupted_sig = ("A" if sig[0] != "A" else "B") + sig[1:]
+    corrupted = f"{header}.{payload}.{corrupted_sig}"
     with pytest.raises(pyjwt.PyJWTError):
         decode_token(corrupted)
 

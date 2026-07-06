@@ -119,7 +119,6 @@ def test_extract_features_tolerates_missing_pid():
     """A window missing one PID must still return all 83 feature keys with no
     KeyError.  The five stats for the absent PID will be NaN — that is correct
     (downstream callers already NaN-fill with the healthy-baseline mean)."""
-    from src.config import USEFUL_PIDS
 
     df = _make_session(60)
     # Drop one PID entirely from the window
@@ -204,7 +203,7 @@ def test_label_ids_are_unique():
 
 @pytest.mark.skipif(not CAROBD_DIR.exists(), reason="carOBD data not present")
 def test_build_dataset_produces_parquet(tmp_path):
-    dataset = build_dataset(carobd_dir=CAROBD_DIR, output_dir=tmp_path)
+    build_dataset(carobd_dir=CAROBD_DIR, output_dir=tmp_path)
     assert (tmp_path / "dataset_v1.parquet").exists()
     assert (tmp_path / "dataset_v1_meta.json").exists()
 

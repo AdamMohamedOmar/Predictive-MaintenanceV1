@@ -1,5 +1,4 @@
 import json
-import math
 
 from src.api.live_store import LiveSessionStore
 from src.config import USEFUL_PIDS
