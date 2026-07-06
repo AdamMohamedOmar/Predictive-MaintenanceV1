@@ -27,20 +27,32 @@ import pandas as pd
 
 from src.config import USEFUL_PIDS
 from src.data_loading import load_carobd_csv
+from src.live.app_csv import adapt_app_df, is_app_format
 
 
 def _load_csv(path: Path) -> pd.DataFrame:
-    """Load a CSV file in either raw carOBD format or pre-processed demo format.
+    """Load a CSV in raw carOBD, raw ELM327-app, or pre-processed demo format.
 
-    Raw carOBD files have column names like "ENGINE_RPM ()" — load_carobd_csv()
-    renames them to clean PID names.  Demo/synthetic files are saved with clean
-    PID names already (e.g. "ENGINE_RPM") — pd.read_csv() suffices for those.
+    * Raw carOBD files have column names like "ENGINE_RPM ()" — load_carobd_csv()
+      renames them to clean PID names.
+    * Raw ELM327 app exports (identified by a ``timestamp_ms`` column) use app
+      names (PEDAL_D, INTAKE_AIR_TEMP) at ~0.34 Hz — adapt_app_df() renames to
+      canonical PIDs and resamples to a 1 Hz grid. Without this the dashboard
+      silently dropped the pedal/IAT columns and played 3-second rows as 1 Hz.
+    * Demo/synthetic files are saved with clean PID names already —
+      pd.read_csv() suffices for those.
     """
     try:
         return load_carobd_csv(path)
     except ValueError:
-        # Columns are already in clean-name format (demo / injected CSV).
         df = pd.read_csv(path)
+        if is_app_format(df):
+            df, missing = adapt_app_df(df)
+            for pid, why in missing:
+                print(
+                    f"CsvStreamer: {path.name}: PID {pid} {why} -> all-NaN; "
+                    f"dependent faults will report Untested."
+                )
         df.attrs["session_id"] = path.stem
         df.attrs["source_file"] = path.name
         return df

@@ -1,4 +1,0 @@
-{
-  "tests/api/test_smoke_api.py::test_smoke_scores_ahmed_csv": true,
-  "tests/api/test_auth_unit.py::test_tampered_token_raises": true
-}

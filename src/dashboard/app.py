@@ -67,7 +67,6 @@ from src.dashboard.theme import (
     FONT_DISPLAY,
     FONT_BODY,
     FONT_MONO,
-    severity_color,
     state_accent,
 )
 from src.live.obd_source import LiveObdSource
@@ -516,6 +515,14 @@ def _render_status_banner(state: DashboardState) -> None:
         stat1_lbl, stat1_val = "LABEL", "HEALTHY"
         stat2_lbl, stat2_val = "CONF", f"{state.classifier_confidence:.0%}"
         stat3_lbl, stat3_val = "ELAPSED", f"{state.elapsed_s} s"
+    elif state.label_untested:
+        accent = ACCENT_INFO
+        label_d = state.classifier_label.replace("_", " ").upper()
+        title = f"UNTESTED — {label_d}"
+        subtitle = "Required PID unavailable on this vehicle · score suppressed"
+        stat1_lbl, stat1_val = "STATUS", "UNTESTED"
+        stat2_lbl, stat2_val = "CONF", f"{state.classifier_confidence:.0%}"
+        stat3_lbl, stat3_val = "ELAPSED", f"{state.elapsed_s} s"
     else:
         # Fault suspected but voting not complete
         accent = ACCENT_WARN
@@ -607,171 +614,6 @@ def _render_status_banner(state: DashboardState) -> None:
     st.markdown(banner_html, unsafe_allow_html=True)
 
 
-def _render_severity_grid(state: DashboardState) -> None:
-    """Four plotly angular gauges — current severity + 60-second forecast threshold.
-
-    The cyan threshold line on each gauge shows WHERE we expect severity to be
-    in 60 seconds, so the driver reads "needle position = now, cyan line = soon".
-    """
-    import plotly.graph_objects as go
-
-    cols = st.columns(4)
-    for col, fault in zip(cols, FAULT_TYPES):
-        sev = state.severities.get(fault, 0.0)
-        fc = state.forecasts.get(fault, 0.0)
-        display = _FAULT_DISPLAY.get(fault, fault)
-
-        sev_pct = round(sev * 100, 1)
-        fc_pct = round(fc * 100, 1)
-        bar_col = severity_color(sev)
-
-        # Delta symbol for caption
-        if fc > sev + 0.02:
-            delta_sym, delta_col = "▲", ACCENT_ALERT
-        elif fc < sev - 0.02:
-            delta_sym, delta_col = "▼", ACCENT_OK
-        else:
-            delta_sym, delta_col = "—", TEXT_MUTED
-
-        fig = go.Figure(
-            go.Indicator(
-                mode="gauge+number",
-                value=sev_pct,
-                number={
-                    "suffix": "%",
-                    "font": {"family": FONT_MONO, "size": 26, "color": TEXT_PRIMARY},
-                },
-                gauge={
-                    "shape": "angular",
-                    "axis": {
-                        "range": [0, 100],
-                        "tickwidth": 0,
-                        "tickcolor": BORDER,
-                        "tickfont": {
-                            "color": TEXT_MUTED,
-                            "size": 8,
-                            "family": FONT_MONO,
-                        },
-                        "nticks": 6,
-                    },
-                    "bar": {"color": bar_col, "thickness": 0.26},
-                    "bgcolor": BG_RAISED,
-                    "borderwidth": 0,
-                    "steps": [
-                        {"range": [0, 30],   "color": _hex_with_alpha(ACCENT_OK,    0.094)},
-                        {"range": [30, 60],  "color": _hex_with_alpha(ACCENT_WARN,  0.094)},
-                        {"range": [60, 100], "color": _hex_with_alpha(ACCENT_ALERT, 0.094)},
-                    ],
-                    # Forecast marker — cyan needle shows where we'll be in 60 s
-                    "threshold": {
-                        "line": {"color": ACCENT_DATA, "width": 3},
-                        "thickness": 0.82,
-                        "value": fc_pct,
-                    },
-                },
-            )
-        )
-        fig.update_layout(
-            paper_bgcolor=BG_SURFACE,
-            plot_bgcolor=BG_SURFACE,
-            font={"color": TEXT_PRIMARY, "family": FONT_MONO},
-            margin={"l": 16, "r": 16, "t": 32, "b": 0},
-            height=190,
-        )
-
-        with col:
-            # Fault name heading
-            st.markdown(
-                f'<div style="font-family:{FONT_DISPLAY};font-size:11px;'
-                f"text-transform:uppercase;letter-spacing:0.1em;"
-                f'color:{TEXT_SECONDARY};text-align:center;margin-bottom:4px;">'
-                f"{display}</div>",
-                unsafe_allow_html=True,
-            )
-            st.plotly_chart(
-                fig, use_container_width=True, config={"displayModeBar": False}
-            )
-            # Caption: now · forecast
-            st.markdown(
-                f'<div style="font-family:{FONT_MONO};font-size:11px;'
-                f'text-align:center;color:{TEXT_MUTED};margin-top:-12px;">'
-                f'NOW <b style="color:{bar_col}">{sev_pct:.0f}%</b>'
-                f"&nbsp;&nbsp;+60s "
-                f'<b style="color:{delta_col}">{fc_pct:.0f}% {delta_sym}</b>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-
-def _render_anomaly_panel(state: DashboardState) -> None:
-    """One-class IsolationForest score, complementing the classifier.
-
-    The classifier asks "which of the 5 known faults?"; this detector asks
-    "does this window look like healthy data?" The two are independent —
-    a high anomaly score with a "healthy" classifier label means the engine
-    is doing something the training data didn't cover.
-
-    Renders a single horizontal-bar gauge. The gauge is intentionally
-    visually distinct from the severity gauges (horizontal vs angular)
-    so a viewer doesn't confuse them.
-    """
-    import plotly.graph_objects as go
-
-    score = float(state.anomaly_score)
-    if score <= 0.0:
-        # Either model not loaded or warming up — show placeholder text
-        # rather than a deceptive "0.00" reading.
-        st.markdown(
-            f'<div class="panel-card" style="font-family:{FONT_MONO};'
-            f'font-size:12px;color:{TEXT_MUTED};padding:20px 16px;">'
-            f"// anomaly detector inactive — model not loaded or warming up</div>",
-            unsafe_allow_html=True,
-        )
-        return
-
-    bar_col = severity_color(score)
-    pct = round(score * 100.0, 1)
-
-    fig = go.Figure(
-        go.Bar(
-            x=[pct],
-            y=[""],
-            orientation="h",
-            marker={"color": bar_col},
-            text=[f"{pct:.1f}%"],
-            textposition="outside",
-            textfont={"family": FONT_MONO, "size": 12, "color": TEXT_PRIMARY},
-            cliponaxis=False,
-        )
-    )
-    fig.update_xaxes(
-        range=[0, 100],
-        showgrid=False,
-        zeroline=False,
-        tickfont={"family": FONT_MONO, "size": 9, "color": TEXT_MUTED},
-        ticksuffix="%",
-    )
-    fig.update_yaxes(visible=False, showgrid=False)
-    fig.update_layout(
-        paper_bgcolor=BG_SURFACE,
-        plot_bgcolor=BG_SURFACE,
-        margin={"l": 0, "r": 50, "t": 8, "b": 8},
-        height=60,
-        showlegend=False,
-    )
-
-    with st.container(border=True):
-        st.markdown(
-            f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
-            f"text-transform:uppercase;letter-spacing:0.1em;"
-            f'color:{TEXT_SECONDARY};margin-bottom:4px;">'
-            f"OUT-OF-DISTRIBUTION SCORE&nbsp;·&nbsp;"
-            f'<span style="color:{TEXT_MUTED};">independent of classifier label</span>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
 
 def _render_pid_strip(history: deque) -> None:
     """2×2 grid of dark sparkline cards — each shows a large live value + rolling plot.
@@ -821,6 +663,8 @@ def _render_pid_strip(history: deque) -> None:
             val_str = f"{int(current_val):,}"
         else:
             val_str = f"{current_val:.1f}"
+        # Hover number format mirrors the displayed value (RPM integer, else 1dp).
+        val_fmt = ",.0f" if pid == "ENGINE_RPM" else ".1f"
 
         # Sparkline — no axes, no labels, just the signal shape
         fig = go.Figure(
@@ -830,6 +674,7 @@ def _render_pid_strip(history: deque) -> None:
                 line={"color": line_color, "width": 1.8},
                 fill="tozeroy",
                 fillcolor=_hex_with_alpha(line_color, 0.094),
+                hovertemplate=f"{label}: %{{y:{val_fmt}}} {unit}<extra></extra>",
             )
         )
         fig.update_xaxes(visible=False, showgrid=False)
@@ -999,6 +844,8 @@ def _render_shap_panel(state: DashboardState) -> None:
 
     # Title strip — label + confidence in Saira Condensed
     label_display = state.classifier_label.replace("_", " ").upper()
+    if state.label_untested:
+        label_display += " (UNTESTED)"
     st.markdown(
         f'<div style="font-family:{FONT_DISPLAY};font-size:11px;'
         f"text-transform:uppercase;letter-spacing:0.1em;"
@@ -1151,6 +998,145 @@ def _render_recommendations(state: DashboardState) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
+def _render_session_report(report) -> None:
+    """End-of-read engine-health summary panel (CSV mode).
+
+    Physics-severity only, self-baselined on the first 20% of the recording
+    (that period is excluded from the verdict), with untested faults marked. This
+    is the honest end-of-read verdict; the live severity strip is only a glance.
+    """
+    v = report.verdict
+    if v.startswith("DEVELOPING"):
+        vcolor = ACCENT_ALERT
+    elif v.startswith("HEALTHY"):
+        vcolor = "#3FB27F"
+    else:
+        vcolor = TEXT_SECONDARY  # INSUFFICIENT DATA
+
+    st.markdown(
+        f'<div style="border:1px solid {BORDER_STRONG};border-radius:10px;'
+        f'padding:16px 18px;margin-bottom:14px;background:rgba(255,255,255,0.02);">'
+        f'<div style="font-family:{FONT_DISPLAY};font-size:11px;letter-spacing:0.12em;'
+        f'text-transform:uppercase;color:{TEXT_SECONDARY};">End-of-Read Health Report</div>'
+        f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+        f'color:{vcolor};margin-top:6px;">{v}</div>'
+        f'<div style="font-family:{FONT_BODY};font-size:11px;color:{TEXT_MUTED};'
+        f'margin-top:4px;">{report.n_evaluable_windows} evaluable · '
+        f'{report.n_baseline_windows} baseline (excluded) · '
+        f'{report.n_untested_windows} untested windows</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    labels = {
+        "air_system": "AIR SYSTEM",
+        "fuel_system": "FUEL SYSTEM",
+        "coolant_temp_sensor": "COOLANT SENSOR",
+        "throttle_position_sensor": "TPS",
+    }
+    by_fault = {fr.fault: fr for fr in report.faults}
+    cols = st.columns(4)
+    for fault, col in zip(labels, cols):
+        fr = by_fault.get(fault)
+        with col:
+            if fr is None:
+                status_txt, scolor, detail = "—", TEXT_MUTED, ""
+            elif fr.status == "untested":
+                status_txt, scolor, detail = "UNTESTED", TEXT_MUTED, "PID unavailable"
+            elif fr.status == "detected":
+                status_txt, scolor = "DETECTED", ACCENT_ALERT
+                detail = f"severity {fr.severity_pct:.0f}%"
+            elif fr.status == "inconclusive":
+                status_txt, scolor = "INCONCLUSIVE", "#C9A227"
+                detail = f"{fr.window_share_pct:.0f}% label share, ~0 severity"
+            else:
+                status_txt, scolor, detail = "HEALTHY", "#3FB27F", ""
+            st.markdown(
+                f'<div style="padding:6px 2px;">'
+                f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
+                f"text-transform:uppercase;letter-spacing:0.1em;"
+                f'color:{TEXT_SECONDARY};">{labels[fault]}</div>'
+                f'<div style="font-family:{FONT_MONO};font-size:16px;font-weight:700;'
+                f'color:{scolor};margin-top:6px;">{status_txt}</div>'
+                f'<div style="font-family:{FONT_BODY};font-size:10px;'
+                f'color:{TEXT_MUTED};">{detail}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    for c in report.caveats:
+        st.markdown(
+            f'<div style="font-family:{FONT_BODY};font-size:10px;color:{TEXT_MUTED};'
+            f'margin-top:2px;">• {c}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_severity_strip(state: DashboardState) -> None:
+    """Compact CURRENT-severity bars — physics severity only, no 60s forecast.
+
+    One slim bar per fault (0-100%), coloured by level. The forecaster (which
+    produced phantom 17%/27% severities on healthy cars) is intentionally not
+    shown. Untested faults (primary PID unavailable, e.g. air_system on a MAF
+    car) show "UNTESTED" instead of a bar. On a healthy engine every bar sits
+    near 0 — a simple, honest readout rather than four busy gauges.
+    """
+    faults = [
+        ("air_system", "AIR SYSTEM"),
+        ("fuel_system", "FUEL SYSTEM"),
+        ("coolant_temp_sensor", "COOLANT SENSOR"),
+        ("throttle_position_sensor", "TPS"),
+    ]
+    untested = set(getattr(state, "untested_faults", []) or [])
+    cols = st.columns(4)
+    for (fault, label), col in zip(faults, cols):
+        with col:
+            if fault in untested:
+                body = (
+                    f'<div style="font-family:{FONT_MONO};font-size:15px;font-weight:700;'
+                    f'color:{TEXT_MUTED};margin-top:8px;">UNTESTED</div>'
+                    f'<div style="font-family:{FONT_BODY};font-size:9px;'
+                    f'color:{TEXT_MUTED};">PID unavailable on this vehicle</div>'
+                )
+            else:
+                sev = float(state.severities.get(fault, 0.0))
+                pct = max(0, min(100, int(round(sev * 100))))
+                if sev >= 0.66:
+                    color = ACCENT_ALERT
+                elif sev >= 0.33:
+                    color = "#C9A227"  # amber
+                else:
+                    color = "#3FB27F"  # green
+                body = (
+                    f'<div style="height:8px;border-radius:4px;background:{BORDER};'
+                    f'overflow:hidden;margin-top:10px;">'
+                    f'<div style="height:100%;width:{pct}%;background:{color};'
+                    f'border-radius:4px;"></div></div>'
+                    f'<div style="font-family:{FONT_MONO};font-size:22px;font-weight:700;'
+                    f'color:{TEXT_PRIMARY};margin-top:4px;line-height:1.1;">{pct}%</div>'
+                )
+            st.markdown(
+                f'<div style="padding:6px 2px;">'
+                f'<div style="font-family:{FONT_DISPLAY};font-size:10px;'
+                f"text-transform:uppercase;letter-spacing:0.1em;"
+                f'color:{TEXT_SECONDARY};">{label}</div>{body}</div>',
+                unsafe_allow_html=True,
+            )
+
+
+# Render at most this many frames/sec during CSV replay, regardless of playback
+# speed. At high speeds we advance MANY rows per rerun but repaint once, so the
+# screen stays readable instead of flashing ~50x/sec.
+_TARGET_FPS = 5.0
+
+
+def _rows_per_tick(speed: float) -> int:
+    """Rows to advance per rerun so render cadence stays ~_TARGET_FPS.
+
+    speed <= _TARGET_FPS  -> 1 row/tick (render rate == speed, smooth).
+    speed  > _TARGET_FPS  -> speed/_TARGET_FPS rows/tick, one repaint per tick.
+    """
+    return max(1, round(speed / _TARGET_FPS))
+
+
 def main() -> None:
     _init_session_state()
     inject_global_styles()
@@ -1186,25 +1172,42 @@ def main() -> None:
     )
 
     if st.session_state.playing and source is not None:
-        row = source.next_row()
+        st.session_state.session_report = None  # clear stale report while replaying
+        is_csv = st.session_state.source_type == "csv"
+        # CSV: advance multiple rows per rerun so we can repaint once at
+        # ~_TARGET_FPS instead of once per row (the 50x flashing). Live: 1/tick.
+        rows_this_tick = _rows_per_tick(speed) if is_csv else 1
 
-        if row is None:
-            if getattr(source, "exhausted", False):
-                # CSV finished
-                st.session_state.playing = False
-            else:
-                # Live source: no fresh row ready this tick — reschedule quickly
-                time.sleep(0.05)
-                st.rerun()
-                return
-        else:
-            # T3.1: InferenceEngine now resamples live rows to 1 Hz before
-            # feeding the 60-row buffer, so features are always computed on a
-            # 1-second time axis regardless of raw adapter poll rate.
-            # Keep set_sample_hz(1.0) so the rate-dependent features
-            # (COOLANT_WARMUP_RATE, FUEL_LOOP_ACTIVE) use the correct axis.
-            # Warn the user if the adapter is too slow to resample reliably.
-            if st.session_state.source_type == "live" and source is not None:
+        for _step in range(rows_this_tick):
+            row = source.next_row()
+
+            if row is None:
+                if getattr(source, "exhausted", False):
+                    # CSV finished — build the end-of-read health report from the
+                    # completed per-window history (self-baseline + untested
+                    # handling live inside build_session_report).
+                    st.session_state.playing = False
+                    if is_csv:
+                        from src.eval.session_report import build_session_report
+
+                        # Session-level untested set from the ENGINE — the last
+                        # DashboardState can be a between-windows snapshot with
+                        # an empty list, which previously let air_system count
+                        # as evaluable ("DETECTED, severity 0%").
+                        st.session_state.session_report = build_session_report(
+                            engine.window_history, engine.session_untested_faults
+                        )
+                    break
+                else:
+                    # Live source: no fresh row ready this tick — reschedule quickly
+                    time.sleep(0.05)
+                    st.rerun()
+                    return
+
+            if not is_csv:
+                # T3.1: InferenceEngine resamples live rows to 1 Hz before the
+                # 60-row buffer, so features use a 1-second axis regardless of
+                # adapter poll rate. Warn if the adapter is too slow to resample.
                 poll_hz = getattr(source, "measured_poll_hz", 0.0)
                 engine.set_sample_hz(1.0)  # resampler guarantees 1-Hz downstream
                 if 0 < poll_hz < 0.3:
@@ -1214,6 +1217,7 @@ def main() -> None:
                         "rows and std features collapse to zero. "
                         "Use a faster ELM327 adapter.".format(poll_hz)
                     )
+
             state = engine.update(row)
             st.session_state.latest_state = state
             st.session_state.pid_history.append(row)
@@ -1228,13 +1232,14 @@ def main() -> None:
         else:
             st.info("Select a session file in the sidebar and press **Play** to begin.")
     else:
+        _report = st.session_state.get("session_report")
+        if _report is not None:
+            _render_session_report(_report)
+
         _render_status_banner(state)
 
-        _section_header("Fault Severity · 60-Second Forecast")
-        _render_severity_grid(state)
-
-        _section_header("Anomaly Score · One-Class Detector")
-        _render_anomaly_panel(state)
+        _section_header("Fault Severity")
+        _render_severity_strip(state)
 
         _section_header("Live PID Readings")
         _render_pid_strip(st.session_state.pid_history)
@@ -1267,8 +1272,10 @@ def main() -> None:
             csv_speed = (
                 st.session_state.streamer.speed if st.session_state.streamer else 1.0
             )
-            # Floor at 20 ms to avoid hammering Streamlit's render loop
-            time.sleep(max(0.02, 1.0 / csv_speed))
+            # We advanced _rows_per_tick(csv_speed) rows this rerun; sleep so the
+            # effective row rate still equals csv_speed while repaints stay near
+            # _TARGET_FPS. Floor at 20 ms to avoid hammering the render loop.
+            time.sleep(max(0.02, _rows_per_tick(csv_speed) / csv_speed))
         else:
             # Live mode: poll at ~20 Hz; actual OBD rows arrive at 1 Hz
             time.sleep(0.05)

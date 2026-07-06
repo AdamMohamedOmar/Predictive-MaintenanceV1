@@ -3,24 +3,12 @@
 from pathlib import Path
 import pandas as pd
 
-# Files in the carOBD dataset whose values pass physical-bounds checks for all
-# 4 critical signature PIDs (vehicle speed, coolant temp, timing advance, STFT).
-# The other 120 files in the dataset have values that violate physical bounds
-# for timing and/or STFT — likely a firmware-version inconsistency in the
-# original carOBD recordings. See docs/DATA_NOTES.md for full audit details.
-USABLE_CAROBD_FILES = frozenset(
-    {
-        "drive1.csv",
-        "live5.csv",
-        "live6.csv",
-        "live7.csv",
-        "live8.csv",
-        "live9.csv",
-        "live10.csv",
-        "live11.csv",
-        "live12.csv",
-    }
-)
+# NOTE: the old USABLE_CAROBD_FILES 9-file whitelist was removed. It encoded a
+# parse bug, not a data-quality fact: 120 files were wrongly rejected because a
+# trailing comma shifted their columns under a bare pd.read_csv (see
+# load_carobd_csv). With index_col=False all 129 files align and pass the
+# physical-bounds guard, so `list_usable_files` now validates each file
+# dynamically instead of filtering against a fixed list. See docs/DATA_NOTES.md.
 
 # Map raw carOBD CSV column names → cleaned, charter-aligned names.
 # This is the single source of truth for column names in the project.
@@ -95,7 +83,13 @@ def load_carobd_csv(
         Columns are the cleaned PID names; row index is the integer second.
     """
     path = Path(path)
-    df = pd.read_csv(path)
+    # index_col=False is load-bearing: ~120 carOBD files end each data row with a
+    # trailing comma (28 fields vs 27 headers). Without this, pandas silently
+    # promotes the first column to the index and shifts EVERY column left by one,
+    # so COOLANT_TEMPERATURE reads fuel-trim values and TIMING_ADVANCE reads
+    # catalyst temps. That misalignment — not sensor corruption — is what the
+    # Week 1 audit mistook for "120 unusable files". See docs/DATA_NOTES.md.
+    df = pd.read_csv(path, index_col=False)
 
     # Verify schema. If a future CSV has an unexpected column, we want to know loudly.
     unknown = set(df.columns) - set(_RENAME_MAP.keys())
@@ -103,6 +97,19 @@ def load_carobd_csv(
         raise ValueError(f"{path.name}: unknown columns {unknown}. Update _RENAME_MAP.")
 
     df = df.rename(columns=_RENAME_MAP)
+
+    # Coerce all sensor columns to numeric. Every carOBD column is a numeric
+    # sensor reading, but a few files carry a stray non-numeric cell (e.g. a lone
+    # ' ' in INTAKE_AIR_TEMPERATURE in live16) that would otherwise make the whole
+    # column object-typed and silently break describe()/skew()/feature extraction.
+    # errors="coerce" turns those isolated cells into NaN, handled like any gap.
+    df = df.apply(pd.to_numeric, errors="coerce")
+
+    # Guard against silent column misalignment. A name-based schema check cannot
+    # catch a value shift (the column NAMES stay valid), so assert that the
+    # signature PIDs sit inside physically possible ranges. A misaligned file
+    # fails here LOUDLY instead of entering training as scrambled "healthy" data.
+    _assert_physical_bounds(df, path)
 
     if drop_unusable:
         df = df.drop(columns=[c for c in _UNUSABLE_PIDS if c in df.columns])
@@ -112,11 +119,44 @@ def load_carobd_csv(
     return df
 
 
+# Physical bounds for signature PIDs (OBD-II spec + engine physics). Used to
+# detect column misalignment, not to validate calibration — bounds are generous.
+_PHYSICAL_BOUNDS = {
+    "VEHICLE_SPEED": (0.0, 250.0),
+    "COOLANT_TEMPERATURE": (-40.0, 130.0),
+    "TIMING_ADVANCE": (-64.0, 64.0),
+    "SHORT_TERM_FUEL_TRIM_BANK_1": (-100.0, 100.0),
+}
+
+
+def _assert_physical_bounds(df: pd.DataFrame, path: Path) -> None:
+    """Raise if any signature PID falls outside physically possible bounds.
+
+    The canonical symptom of the trailing-comma column shift is an out-of-range
+    TIMING_ADVANCE or STFT, so this doubles as a misalignment detector.
+    """
+    for col, (lo, hi) in _PHYSICAL_BOUNDS.items():
+        if col not in df.columns:
+            continue
+        s = df[col].dropna()
+        if len(s) and (s.min() < lo or s.max() > hi):
+            raise ValueError(
+                f"{path.name}: {col} range [{s.min():.1f}, {s.max():.1f}] is outside "
+                f"physical bounds [{lo}, {hi}]. Likely a column-shift / parse error — "
+                f"check for a trailing delimiter and confirm index_col=False."
+            )
+
+
 def list_usable_files(data_dir: Path | str) -> list[Path]:
-    """Return paths of carOBD CSVs that pass our physical-bounds audit.
+    """Return paths of carOBD CSVs that load and pass the physical-bounds guard.
 
     Use this everywhere instead of globbing the data directory directly.
     Centralizes the 'which files do we actually trust' decision in one place.
+
+    After the trailing-comma parse fix (see load_carobd_csv), every carOBD file
+    aligns and passes bounds, so this now validates each file rather than
+    filtering against a hardcoded 9-file whitelist. A file that fails to load or
+    breaches physical bounds is skipped with a warning, never silently included.
 
     Parameters
     ----------
@@ -128,5 +168,14 @@ def list_usable_files(data_dir: Path | str) -> list[Path]:
     list[Path]
         Sorted list of usable file paths. Empty list if data_dir is empty.
     """
+    import warnings
+
     data_dir = Path(data_dir)
-    return sorted(p for p in data_dir.glob("*.csv") if p.name in USABLE_CAROBD_FILES)
+    usable: list[Path] = []
+    for p in sorted(data_dir.glob("*.csv")):
+        try:
+            load_carobd_csv(p)  # raises on misalignment / bounds breach
+            usable.append(p)
+        except (ValueError, pd.errors.ParserError) as exc:
+            warnings.warn(f"Skipping {p.name}: {exc}")
+    return usable

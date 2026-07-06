@@ -1,0 +1,74 @@
+{
+  "metric": "leave_one_family_out",
+  "mean_macro_f1": 0.9769220241158518,
+  "std_macro_f1": 0.011762222860853919,
+  "min_macro_f1": 0.9578656734208105,
+  "worst_family": "live",
+  "per_family": {
+    "drive": {
+      "macro_f1": 0.9828191119604975,
+      "n_test_windows": 12568,
+      "n_test_sessions": 13,
+      "per_class_f1": {
+        "healthy": 0.968,
+        "air_system": 0.989,
+        "fuel_system": 0.995,
+        "coolant_temp_sensor": 1.0,
+        "throttle_position_sensor": 0.951,
+        "cold_start": 0.995
+      }
+    },
+    "idle": {
+      "macro_f1": 0.9687746975490179,
+      "n_test_windows": 21802,
+      "n_test_sessions": 47,
+      "per_class_f1": {
+        "healthy": 0.933,
+        "air_system": 0.98,
+        "fuel_system": 0.991,
+        "coolant_temp_sensor": 0.999,
+        "throttle_position_sensor": 0.91,
+        "cold_start": 1.0
+      }
+    },
+    "live": {
+      "macro_f1": 0.9578656734208105,
+      "n_test_windows": 30336,
+      "n_test_sessions": 39,
+      "per_class_f1": {
+        "healthy": 0.933,
+        "air_system": 0.965,
+        "fuel_system": 0.917,
+        "coolant_temp_sensor": 1.0,
+        "throttle_position_sensor": 0.932,
+        "cold_start": 1.0
+      }
+    },
+    "long": {
+      "macro_f1": 0.9880574908882895,
+      "n_test_windows": 19270,
+      "n_test_sessions": 12,
+      "per_class_f1": {
+        "healthy": 0.983,
+        "air_system": 0.988,
+        "fuel_system": 0.989,
+        "coolant_temp_sensor": 1.0,
+        "throttle_position_sensor": 0.969,
+        "cold_start": 1.0
+      }
+    },
+    "ufpe": {
+      "macro_f1": 0.9870931467606439,
+      "n_test_windows": 10454,
+      "n_test_sessions": 18,
+      "per_class_f1": {
+        "healthy": 0.984,
+        "air_system": 0.989,
+        "fuel_system": 0.978,
+        "coolant_temp_sensor": 1.0,
+        "throttle_position_sensor": 0.972,
+        "cold_start": 1.0
+      }
+    }
+  }
+}

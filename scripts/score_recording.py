@@ -122,6 +122,18 @@ def _score(
 
     result = evaluate_real_fault(adapted, **engine_kwargs)
 
+    # Cross-vehicle PID availability: a fault whose PRIMARY PID is absent on this
+    # car cannot be honestly scored (XGBoost still emits a class for NaN
+    # features), so mark it Untested instead of trusting the number. Also record
+    # PIDs that are missing entirely, since their features are NaN across ALL
+    # classes and reduce confidence in every score.
+    import pandas as pd
+    from src.eval.pid_availability import available_pids, missing_pids, untested_faults
+
+    _avail = available_pids(pd.read_csv(adapted))
+    result["untested_faults"] = untested_faults(_avail)
+    result["missing_pids"] = missing_pids(pd.read_csv(adapted))
+
     result_path = out_dir / f"{adapted.stem}_result.json"
     with open(result_path, "w") as f:
         json.dump(result, f, indent=2)
@@ -155,13 +167,30 @@ def _print_verdict(result: dict) -> None:
     print(f"  Source  : {result['csv_path']}")
     print(f"  Windows : {result['n_windows']}  ({result['n_rows']} rows)")
     print()
+    untested = result.get("untested_faults", {})
+    missing = result.get("missing_pids", [])
+
     print("  Label distribution:")
     for label, count in sorted(summary["label_counts"].items(),
                                key=lambda x: -x[1]):
         pct = 100.0 * count / result["n_windows"] if result["n_windows"] else 0
         bar = "#" * int(pct / 5)
-        print(f"    {label:<35} {count:4d} windows  ({pct:5.1f}%)  {bar}")
+        tag = "  [UNTESTED - unreliable]" if label in untested else ""
+        print(f"    {label:<35} {count:4d} windows  ({pct:5.1f}%)  {bar}{tag}")
     print()
+
+    if missing:
+        print(f"  Missing PIDs on this vehicle (all-NaN): {', '.join(missing)}")
+        print("    -> every feature derived from them is NaN; ALL scores carry "
+              "reduced confidence.")
+        print()
+    if untested:
+        print("  UNTESTED faults (primary PID unavailable - score is NOT meaningful):")
+        for fault, pids in untested.items():
+            print(f"    {fault:<35} needs {', '.join(pids)}")
+        print("    Windows assigned to an Untested class above are unreliable, not "
+              "true detections.")
+        print()
 
     anomaly_scores = [w["anomaly_score"] for w in result["windows"]]
     if anomaly_scores:
@@ -180,13 +209,29 @@ def _print_verdict(result: dict) -> None:
                   f"({'PASS >=0.60' if fi['recall'] >= 0.60 else 'BELOW target 0.60'})")
         print()
 
-    healthy_frac = 1.0 - summary["fault_fraction"]
-    if healthy_frac >= 0.70:
-        verdict = "LOOKS HEALTHY (>= 70 % healthy windows)"
-    elif summary["fault_fraction"] >= 0.40:
-        verdict = "FAULT DETECTED (>= 40 % non-healthy windows)"
+    # Verdict computed ONLY over evaluable windows. Windows classified as an
+    # Untested class (primary PID absent) are set aside, never counted as faults
+    # -- otherwise a MAF car with no MAP reads as "FAULT DETECTED" on air_system.
+    evaluable_counts = {k: v for k, v in summary["label_counts"].items() if k not in untested}
+    untested_count = sum(v for k, v in summary["label_counts"].items() if k in untested)
+    n_eval = sum(evaluable_counts.values())
+    fault_eval = sum(c for lbl, c in evaluable_counts.items()
+                     if lbl not in ("healthy", "cold_start"))
+
+    if untested_count:
+        print(f"  Untested (set aside, not counted as faults): {untested_count} windows")
+        print()
+
+    min_eval = max(10, int(0.2 * result["n_windows"]))
+    if n_eval < min_eval:
+        verdict = (f"INSUFFICIENT EVALUABLE DATA "
+                   f"({n_eval}/{result['n_windows']} windows evaluable; rest Untested)")
+    elif fault_eval / n_eval >= 0.40:
+        verdict = "FAULT DETECTED (>= 40% of EVALUABLE windows)"
+    elif (n_eval - fault_eval) / n_eval >= 0.70:
+        verdict = "LOOKS HEALTHY (>= 70% of EVALUABLE windows)"
     else:
-        verdict = "MIXED / AMBIGUOUS"
+        verdict = "MIXED / AMBIGUOUS (of EVALUABLE windows)"
     print(f"  Verdict: {verdict}")
     print()
     print("=" * 60)

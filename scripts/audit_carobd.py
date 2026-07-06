@@ -40,7 +40,7 @@ BOUNDS = [
 
 def audit_file(path: Path) -> dict:
     """Return per-file pass/fail info for each bounded PID."""
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, index_col=False)
     result = {"file": path.name, "n_rows": len(df)}
     for col, lo, hi, _ in BOUNDS:
         s = df[col].dropna()
@@ -65,7 +65,7 @@ def audit_catalyst_temp(usable_files: list[Path]) -> dict:
     stats = {"pid": col, "per_file": {}, "varies_usefully": False}
     stds = []
     for p in usable_files:
-        df = pd.read_csv(p)
+        df = pd.read_csv(p, index_col=False)
         if col not in df.columns:
             continue
         s = df[col].dropna()
