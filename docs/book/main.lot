@@ -1,0 +1,11 @@
+\contentsline {table}{\numberline {2}{\ignorespaces Related work along the two axes that matter for our problem: fault-label realism and data interface. No surveyed work combines verified faults with the 1\,Hz consumer OBD-II interface.}}{8}{table.caption.1}%
+\contentsline {table}{\numberline {3}{\ignorespaces Measured poll rate versus polled PID count (2015 Toyota Yaris, ELM327 Bluetooth clone, parked idle).}}{11}{table.caption.3}%
+\contentsline {table}{\numberline {4}{\ignorespaces Classifier results across evaluation paths. All numbers measure recovery of synthetically injected faults (self-consistency), not real-fault detection.}}{20}{table.caption.5}%
+\contentsline {table}{\numberline {5}{\ignorespaces Per-class F1 for the worst LOFO fold (live family held out; 39 sessions, 30{,}336 test windows).}}{20}{table.caption.6}%
+\contentsline {table}{\numberline {6}{\ignorespaces Real-vehicle scoring outcomes on the healthy 2015 Toyota Yaris, with the Untested contract applied. Raw label counts are the classifier's per-window outputs before suppression.}}{26}{table.caption.12}%
+\contentsline {table}{\numberline {7}{\ignorespaces PID forecaster mean absolute error (z-units, 60\,s horizon, held-out sessions) versus the persistence baseline.}}{27}{table.caption.13}%
+\contentsline {table}{\numberline {8}{\ignorespaces XGBoost fixed-holdout (drive1 + live12) per-class metrics. Macro-F1 = 0.962.}}{59}{table.caption.14}%
+\contentsline {table}{\numberline {9}{\ignorespaces Random Forest baseline, fixed holdout, earlier five-class task. Macro-F1 = 1.000 --- reported as a memorization warning, not a result.}}{59}{table.caption.15}%
+\contentsline {table}{\numberline {10}{\ignorespaces LOFO cross-validation: per-class F1 for every held-out family. Mean macro-F1 = 0.977, $\sigma $ = 0.012.}}{60}{table.caption.16}%
+\contentsline {table}{\numberline {11}{\ignorespaces LOSO cross-validation summary over all 129 single-session folds.}}{60}{table.caption.17}%
+\contentsline {table}{\numberline {12}{\ignorespaces Withheld-configuration experiment: train on injector configuration A, evaluate on configuration B.}}{60}{table.caption.18}%

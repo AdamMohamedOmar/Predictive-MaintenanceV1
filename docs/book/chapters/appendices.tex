@@ -1,0 +1,170 @@
+\appendix
+
+\section{Key Source Code Listings --- Analysis Pipeline}
+\label{app:python}
+
+The listings below are included verbatim from the project repository
+(\texttt{Predictive-MaintenanceV1}) at the revision this book was built
+from. They are the four modules the main text leans on most: the fault
+injection engine (Section~\ref{sec:injector}), the XGBoost training module
+(Section~\ref{sec:models}), the end-of-read session report
+(Section~\ref{sec:dashboard}), and the PID availability contract that
+implements the Untested behavior.
+
+\lstinputlisting[style=pystyle,
+  caption={\texttt{src/injection/fault\_injector.py} --- the
+    physics-constrained fault injection engine.},
+  label={lst:injector}]{../../src/injection/fault_injector.py}
+
+\clearpage
+\lstinputlisting[style=pystyle,
+  caption={\texttt{src/models/xgb\_classifier.py} --- XGBoost training,
+    evaluation, and persistence, including class-balance weights and the
+    fuel-system down-weight.},
+  label={lst:xgb}]{../../src/models/xgb_classifier.py}
+
+\clearpage
+\lstinputlisting[style=pystyle,
+  caption={\texttt{src/eval/session\_report.py} --- the end-of-read health
+    report: 20\,\% self-baseline, physics-severity 95th percentile,
+    inconclusive rule, and the minimum-evaluable-windows floor.},
+  label={lst:report}]{../../src/eval/session_report.py}
+
+\clearpage
+\lstinputlisting[style=pystyle,
+  caption={\texttt{src/eval/pid\_availability.py} --- per-fault required
+    PIDs and the Untested contract.},
+  label={lst:pidavail}]{../../src/eval/pid_availability.py}
+
+\clearpage
+\section{Key Source Code Listings --- OBD-LOG Android App}
+\label{app:android}
+
+The two listings below are copied from the OBD-LOG repository
+(\texttt{github.com/Terminatorbds/OBD-LOG}), from
+\texttt{app/src/main/java/com/example/obdlogger/}. \texttt{ObdPids.kt}
+defines the tiered PID table and the reply parser;
+\texttt{ObdLogger.kt} performs ELM327 initialization, ECU capability
+detection via the support bitmasks, and single-PID reads.
+
+\lstinputlisting[style=ktstyle,
+  caption={\texttt{ObdPids.kt} --- tiered PID definitions, decode formulas,
+    and ELM327 reply parsing.},
+  label={lst:obdpids}]{listings/ObdPids.kt}
+
+\clearpage
+\lstinputlisting[style=ktstyle,
+  caption={\texttt{ObdLogger.kt} --- adapter initialization and
+    supported-PID detection.},
+  label={lst:obdlogger}]{listings/ObdLogger.kt}
+
+\clearpage
+\section{Full Per-Class Metrics Tables}
+\label{app:metrics}
+
+All values below are taken directly from the evaluation artifacts in the
+repository's \texttt{results/} directory
+(\texttt{xgb\_classifier\_v1\_results.json}, \texttt{lofo\_eval.json},
+\texttt{loso\_cv\_results.json}, \texttt{rf\_classifier\_v1\_results.json},
+\texttt{withheld\_coeff\_results.json}).
+
+\begin{table}[H]
+  \centering
+  \caption{XGBoost fixed-holdout (drive1 + live12) per-class metrics.
+    Macro-F1 = 0.962.}
+  \label{tab:xgbperclass}
+  \begin{tabular}{lcccc}
+    \toprule
+    Class & Precision & Recall & F1 & Support\\
+    \midrule
+    healthy                    & 0.991 & 0.965 & 0.978 & 346\\
+    air\_system                & 0.970 & 0.865 & 0.915 & 223\\
+    fuel\_system               & 0.825 & 0.965 & 0.889 & 171\\
+    coolant\_temp\_sensor      & 1.000 & 1.000 & 1.000 & 216\\
+    throttle\_position\_sensor & 0.979 & 1.000 & 0.990 & 189\\
+    cold\_start                & 1.000 & 1.000 & 1.000 & 29\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{Random Forest baseline, fixed holdout, earlier five-class task.
+    Macro-F1 = 1.000 --- reported as a memorization warning, not a result.}
+  \label{tab:rfperclass}
+  \begin{tabular}{lcccc}
+    \toprule
+    Class & Precision & Recall & F1 & Support\\
+    \midrule
+    healthy                    & 1.000 & 1.000 & 1.000 & 375\\
+    air\_system                & 1.000 & 1.000 & 1.000 & 163\\
+    fuel\_system               & 1.000 & 1.000 & 1.000 & 163\\
+    coolant\_temp\_sensor      & 1.000 & 1.000 & 1.000 & 163\\
+    throttle\_position\_sensor & 1.000 & 1.000 & 1.000 & 163\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{LOFO cross-validation: per-class F1 for every held-out family.
+    Mean macro-F1 = 0.977, $\sigma$ = 0.012.}
+  \label{tab:lofofull}
+  \begin{tabular}{lccccc}
+    \toprule
+    & \multicolumn{5}{c}{Held-out family}\\
+    \cmidrule(lr){2-6}
+    Class & drive & idle & live & long & ufpe\\
+    \midrule
+    healthy                    & 0.968 & 0.933 & 0.933 & 0.983 & 0.984\\
+    air\_system                & 0.989 & 0.980 & 0.965 & 0.988 & 0.989\\
+    fuel\_system               & 0.995 & 0.991 & 0.917 & 0.989 & 0.978\\
+    coolant\_temp\_sensor      & 1.000 & 0.999 & 1.000 & 1.000 & 1.000\\
+    throttle\_position\_sensor & 0.951 & 0.910 & 0.932 & 0.969 & 0.972\\
+    cold\_start                & 0.995 & 1.000 & 1.000 & 1.000 & 1.000\\
+    \midrule
+    Macro-F1                   & 0.983 & 0.969 & 0.958 & 0.988 & 0.987\\
+    Test windows               & 12{,}568 & 21{,}802 & 30{,}336 & 19{,}270 & 10{,}454\\
+    Test sessions              & 13 & 47 & 39 & 12 & 18\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{LOSO cross-validation summary over all 129 single-session folds.}
+  \label{tab:losofull}
+  \begin{tabular}{lc}
+    \toprule
+    Statistic & Macro-F1\\
+    \midrule
+    Mean               & 0.917\\
+    Standard deviation & 0.084\\
+    Best fold          & 1.000 (multiple sessions)\\
+    Worst fold         & 0.699 (live31)\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{Withheld-configuration experiment: train on injector
+    configuration A, evaluate on configuration B.}
+  \label{tab:withheld}
+  \begin{tabular}{lcc}
+    \toprule
+    & Config A (train) & Config B (withheld)\\
+    \midrule
+    air\_system magnitude (kPa-eq.)       & 13.0 & 9.0\\
+    fuel\_system magnitude (\% LTFT)      & 18.0 & 24.0\\
+    coolant\_temp\_sensor target ($^{\circ}$C) & 42.0 & 38.0\\
+    throttle\_position\_sensor factor     & 1.35 & 1.50\\
+    Onset fraction                        & 0.40 & 0.55\\
+    Ramp fraction                         & 0.15 & 0.25\\
+    Noise $\sigma$                        & 0.3  & 0.5\\
+    \midrule
+    Macro-F1                              & 0.892 & 0.859\\
+    \multicolumn{3}{l}{Gap = 0.033 (same-config minus withheld-config)}\\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,0 +1,180 @@
+\section{Conclusion and Future Work}
+\label{ch:conclusion}
+
+\subsection{Conclusions}
+
+We set out to catch a developing engine fault from the standard 1\,Hz
+OBD-II stream, before a diagnostic trouble code fires. What we built is a
+physics-grounded fault injection engine for four common fault classes; a
+vehicle-agnostic feature and normalization pipeline that lets a model
+trained on one car run on another; a six-class XGBoost classifier evaluated
+under session-level and family-level cross-validation; a per-PID
+forecaster and a one-class anomaly detector as a second, independent line
+of evidence; a native Android application, OBD-LOG, for real-vehicle data
+collection over Bluetooth; a live Streamlit dashboard that explains its own
+predictions and closes every session with a plain-language health verdict;
+and, threaded through all of it, a reporting layer that says ``Untested''
+or ``insufficient data'' instead of manufacturing a number it cannot back.
+
+What we did not build is a validated real-fault detector. That distinction
+matters more than any F1 score in this book, and we have tried not to blur
+it anywhere above. Every classification number in Chapter~\ref{ch:results}
+measures the model's ability to recover labels written by our own
+injector. Building the validated version needs one thing our project could
+not supply on its own timeline: labeled recordings of real, induced faults.
+Section~\ref{sec:future} makes that the first line of future work, not the
+last, because it is the single change that would do the most.
+
+If this project has one engineering contribution worth naming beyond the
+models themselves, it is the discipline of refusal. Twice in this book the
+system was handed a situation it could not honestly resolve --- a vehicle
+missing the sensor a fault class depends on, a recording too short to
+support a verdict --- and twice it said so instead of guessing. The
+alternative version of this system, the one we shipped first and then
+un-shipped, guessed with 97\,\% confidence on a healthy car. We consider the
+version that admits what it does not know to be the more useful tool, even
+though it produces fewer confident-looking numbers for a slide.
+
+That discipline did not come free. It cost us a working demo we had to
+throw away, a redesign of the reporting layer around an evaluability
+contract nobody had asked for at project kickoff, and an uncomfortable
+week of explaining to each other why a 97\,\% confidence score was the
+project's worst result rather than its best. We record that cost here
+because a reader building a similar system will hit the same choice ---
+ship the number the model gives you, or build the machinery to know when
+that number is not trustworthy --- and the second path is more work for a
+less impressive-looking demo. We think it is the only defensible path for
+anything a mechanic or a driver might actually act on.
+
+The broader lesson carries past this particular car and these particular
+four faults. Any system trained on synthetic labels inherits the honesty
+of its label generator, and any system deployed across more than one
+instance of its target domain inherits the assumptions baked into its
+first training example. We tried to make both of those inheritances
+visible rather than implicit: the injector's physics reasoning lives next
+to its code, the withheld-configuration gap is a number in this book and
+not a footnote, and the cross-vehicle failure that produced the Untested
+contract is documented as a failure, not smoothed into a success story
+after the fact. If a future team extends this work, we would rather they
+inherit the visible assumptions than have to rediscover them the way we
+did.
+
+\subsection{Limitations}
+
+We list these without softening them, because the audience for this report
+already knows the honest framing and overselling would cost more credibility
+than it could ever buy back.
+
+\begin{enumerate}
+  \item \textbf{Every fault metric in this book measures self-consistency,
+    not field performance.} The injector writes the fault; the classifier
+    learns to invert the injector. A macro-F1 of 0.958 on a held-out
+    driving family says the model generalizes across driving contexts for
+    faults it was told to recognize. It does not say the model would catch
+    a real vacuum leak on a real car. No experiment in this project
+    contradicts that limitation, and none was designed to.
+  \item \textbf{The model has never detected a real fault.} Not once, on
+    any vehicle, in any recording. The real-fault evaluation code exists
+    in the repository and its data folder is empty. This is the single
+    most important gap between what we built and what a mechanic would need
+    to trust it.
+  \item \textbf{Air-system detection is unavailable on the majority of
+    modern cars.} MAF-based engines --- our own test vehicle among them ---
+    expose no MAP sensor, and the air-system fault's primary signature
+    lives on MAP. On those cars the class is correctly marked Untested, but
+    correctly refusing to answer is not the same as answering.
+  \item \textbf{Phone-based sampling aliases fast dynamics.} Our measured
+    ELM327 poll rate falls to 0.37\,Hz at 21 polled PIDs --- well under the
+    1\,Hz the training pipeline assumes. Results scored on app-captured
+    data should be read as pessimistic relative to a faster logger, because
+    slow polling smears short fuel-trim oscillations into apparent
+    stability, which can understate real trim variance and, in the other
+    direction, overstate false-positive risk on transient events the
+    sampler simply missed.
+  \item \textbf{Self-baselining cannot see a fault that predates the
+    recording.} The end-of-read report treats the first 20\,\% of a session
+    as healthy ground truth. A car that is already faulty at key-on has
+    that fault baked into its own baseline and will read as normal for the
+    rest of the drive. This is a structural property of the self-baseline
+    design, not a bug to be patched.
+\end{enumerate}
+
+\subsection{Future Work}
+\label{sec:future}
+
+The items below are ordered by impact, not by how soon they could be
+started. Each one names a specific mechanism and a specific reason it was
+not already done, because ``improve the model further'' is not a plan.
+
+\begin{enumerate}
+  \item \textbf{Real fault data.} This is the one change that would convert
+    the project from ``a detection algorithm plus a collection protocol''
+    into a validated detector. A single matched set of before, during, and
+    after recordings of a genuinely induced fault --- a vacuum line
+    partially disconnected under a mechanic's supervision, say --- would let
+    the real-fault evaluation code that already exists in the repository
+    produce its first non-empty result. We did not do this in the current phase
+    because it requires a donor vehicle, a supervising mechanic, and a
+    written abort protocol we were not yet in a position to execute safely;
+    the collection protocol documenting exactly how to do it is already
+    written and waiting in the repository, alongside the scorer that would
+    consume its output.
+
+  \item \textbf{A live Android-to-server pipeline.} Route the app's CSV
+    output over HTTPS, in roughly 60-second chunks, to a cloud-hosted
+    version of the existing FastAPI backend, which already implements JWT
+    authentication. The server holds one persistent scoring session per
+    vehicle --- one fitted baseline, every chunk scored against it in
+    sequence --- and the Streamlit dashboard mirrors that session live
+    while the phone shows a simplified health card. This was not built now
+    because it needs a hosting decision (which cloud, which uptime
+    guarantee) that is out of scope for a laptop-based thesis defense, and
+    because it depends on item 1 producing enough real sessions to be
+    worth streaming.
+
+  \item \textbf{Apache Kafka for multi-vehicle ingest.} At fleet scale,
+    direct HTTP ingest does not survive a phone losing signal mid-upload,
+    and a new server process per vehicle does not scale. The natural next
+    architecture makes the Android app a Kafka producer, runs a consumer
+    group that performs inference per vehicle, and writes a second consumer
+    to a time-series store for the dashboard to query. Kafka's offset-based
+    replay absorbs cellular dropouts that a plain HTTP POST cannot, and a
+    Kafka Connect OBD-II source connector is the natural long-term target.
+    This is future work rather than current work because it only pays for
+    itself once item~2 exists and more than one or two vehicles are
+    actually streaming --- building it first would be premature
+    infrastructure for a single-laptop demo.
+
+  \item \textbf{Per-regime baselining.} Right now one healthy baseline
+    covers idle and driving alike, and we measured the resulting
+    idle-to-drive feature shift at a mild 2--3$\sigma$, concentrated on the
+    throttle side, and already absorbed by the regime one-hot features and
+    the alerter's temporal vote. Because the measured shift is mild, this
+    is a robustness improvement queued behind the higher-impact items
+    above, not a critical bug demanding an emergency fix. Implementing it
+    properly means retraining with regime-conditioned normalization rather
+    than patching the existing scaler.
+
+  \item \textbf{Intermittent and accelerating fault shapes in the
+    injector.} Every fault the injector produces today follows one shape:
+    a linear ramp to a held plateau. Real components do not always fail
+    that way --- a connector that only opens under vibration produces an
+    intermittent signature, and bearing-style wear often follows a
+    Weibull-shaped acceleration rather than a straight line. Widening the
+    injector's shape library would reduce the risk that the classifier is
+    quietly overfitting to ``ramp-then-hold'' as a pattern rather than
+    learning the underlying fault physics. We scoped this out of the
+    current phase because the four existing fault models, in ramp and step
+    mode, already consumed the available time for physics validation, and
+    adding shapes without re-validating physics for each one would
+    reintroduce exactly the kind of unaudited synthetic data this project
+    was built to avoid.
+
+  \item \textbf{A session-label field in the Android app.} A single text
+    field, written as one more CSV column, so a recording can declare
+    itself \emph{baseline}, \emph{fault-type-X}, or \emph{healthy-post-repair}
+    without an external notebook tracking which file is which. It is a
+    small UI change, deliberately left until last because it only becomes
+    necessary once real-fault collection (item~1) is actually underway ---
+    there is no annotation burden to solve before then.
+\end{enumerate}

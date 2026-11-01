@@ -1,0 +1,191 @@
+\section{Literature Survey and Related Work}
+\label{ch:literature}
+
+\subsection{Overview}
+
+Work relevant to this project falls into three strands: diagnostics built
+directly on the OBD-II interface, machine learning for automotive predictive
+maintenance in general, and the specific model family (gradient-boosted
+trees with attribution methods) that we deploy. Reading across the three
+strands, a consistent pattern emerges: the studies with realistic fault data
+do not use the consumer OBD-II interface, and the studies on the consumer
+interface do not have realistic fault data. Our project sits precisely in
+that intersection, which is why the survey below pays as much attention to
+each paper's \emph{data source} as to its model.
+
+\subsection{Related Work}
+
+\subsubsection{Diagnostics on the OBD-II interface}
+
+Rimpas et al.~\cite{rimpas2020} logged OBD-II parameters --- fuel trims,
+coolant temperature, ignition timing, and airflow among them --- to monitor
+vehicle operation and fuel consumption, and discussed how deviations in
+individual PIDs indicate specific degradations. Their work confirms the
+diagnostic value of exactly the PIDs our system builds features on, but the
+analysis is per-parameter and threshold-style. No classifier is trained, and
+no labeled faults are used; the interpretation of a drifting trim value is
+left to the reading engineer.
+
+Shafi et al.~\cite{shafi2018} built a remote health-monitoring system with
+an OBD-II dongle streaming to a phone and applied several classifiers
+(decision trees, SVM, k-NN) to detect anomalies in four vehicle subsystems.
+Their fault examples, however, come from threshold rules applied to the same
+stream the classifiers read --- the labels are derived from the data rather
+than from independently verified physical faults. The system demonstrates
+the plumbing of phone-based OBD-II ML but not validated fault detection.
+
+The carOBD dataset and its accompanying thesis by
+Maranh\~ao~\cite{maranhao_carobd} provide the raw material our project
+trains on: 129 sessions of 1\,Hz OBD-II logging from a single Toyota Etios,
+covering idle, commute, campus, highway, and long-trip driving. The dataset
+contains healthy driving only. To our knowledge no public OBD-II corpus at
+this rate contains verified, labeled faults; we searched for one and did not
+find it, and this absence is the central constraint the project designs
+around.
+
+That absence is structural, not an oversight anyone will quickly correct.
+Collecting labeled fault data at scale means deliberately breaking cars, or
+waiting for a fleet's worth of them to break naturally while logging
+continuously, and then joining the logs to verified repair records. The first is expensive and, done carelessly,
+dangerous; the second requires fleet access and years of patience. Whoever
+pays for either has a commercial reason to keep the result private. The
+public-data vacuum that Theissler et al.\ describe at the field level is, in
+other words, structural, and a graduation project cannot fill it by trying
+harder. It can only decide how to work honestly inside it, which is the
+decision Section~\ref{sec:injector} documents.
+
+\subsubsection{Machine learning for automotive predictive maintenance}
+
+Theissler et al.~\cite{theissler2021} survey machine learning for predictive
+maintenance across the automotive industry and catalogue the field's
+recurring obstacles: scarce labeled failure data, class imbalance, and the
+gap between lab results and fleet deployment. They note explicitly that
+run-to-failure data for vehicles is rarely public because it is expensive
+and commercially sensitive --- the same wall we hit, met in their survey as
+a field-wide condition rather than a local complaint.
+
+Prytz et al.~\cite{prytz2015} predicted compressor repairs in a commercial
+truck fleet from logged vehicle data and workshop maintenance records. Their
+labels are real --- actual repairs --- but the data source is an OEM fleet
+telematics database with service-record joins, not the standardized consumer
+port, and the features are aggregated per vehicle-visit rather than
+streaming windows. The study demonstrates that drift-before-failure is
+learnable in principle, at fleet scale, with access no individual owner has.
+
+Theissler~\cite{theissler2017} addressed the known/unknown fault problem
+with ensemble anomaly detection over in-vehicle recordings, arguing that a
+detector must handle fault types absent from training. Our two-pillar
+design --- a supervised classifier for the four modeled faults plus a
+one-class IsolationForest~\cite{liu2008} trained on healthy windows only ---
+is a direct application of that argument at consumer-hardware scale.
+
+Vergara et al.~\cite{vergara2023} published EngineFaultDB, a labeled engine
+fault dataset with baseline classification results. The faults are real, but
+they were produced on a laboratory engine test bench with instrumentation
+beyond the OBD-II PID set, sampled under controlled load profiles. We
+considered benchmarking against it and declined: a bench dynamometer corpus
+and a 1\,Hz road-driving corpus differ in sensors, dynamics, and noise floor
+to the point where a comparison table would mislead more than inform.
+
+\subsubsection{Models and attribution}
+
+Gradient-boosted decision trees remain the strongest general-purpose family
+for tabular sensor features, and XGBoost~\cite{chen2016} is its standard
+implementation; random forests~\cite{breiman2001} provide the natural
+bagging baseline. For attribution we use SHAP~\cite{lundberg2017}, whose
+TreeExplainer computes exact Shapley values for tree ensembles --- on a
+workshop floor, ``LTFT pushed this prediction toward fuel-system by 0.43''
+is an explanation a mechanic can act on. The protocol layer underneath the
+whole pipeline is standardized by SAE J1979~\cite{saej1979} and
+ISO 15765-4~\cite{iso15765}, and our tooling builds on the python-obd
+library~\cite{pythonobd}, Streamlit~\cite{streamlit}, and
+FastAPI~\cite{fastapi}.
+
+Table~\ref{tab:relwork} lays the surveyed work along the two axes that
+decide whether a result transfers to our setting: the realism of its fault
+labels and the interface its data came through. The pattern is stark ---
+every row has one or the other, never both.
+
+\begin{table}[H]
+  \centering
+  \caption{Related work along the two axes that matter for our problem:
+    fault-label realism and data interface. No surveyed work combines
+    verified faults with the 1\,Hz consumer OBD-II interface.}
+  \label{tab:relwork}
+  \begin{tabular}{lll}
+    \toprule
+    Work & Fault labels & Data source\\
+    \midrule
+    Rimpas et al.~\cite{rimpas2020} & None (per-PID thresholds) & Consumer OBD-II\\
+    Shafi et al.~\cite{shafi2018} & Derived from the stream & Consumer OBD-II\\
+    Prytz et al.~\cite{prytz2015} & Real (repair records) & OEM fleet telematics\\
+    Vergara et al.~\cite{vergara2023} & Real (induced) & Bench dynamometer\\
+    Theissler~\cite{theissler2017} & Mixed known/unknown & In-vehicle recordings\\
+    \textbf{This work} & Synthetic, physics-constrained & Consumer OBD-II, 1\,Hz\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Gap Analysis}
+
+Laying the surveyed work side by side exposes four gaps.
+
+\textbf{Realistic faults and consumer hardware do not co-occur.} Bench
+studies such as EngineFaultDB~\cite{vergara2023} have verified faults but
+non-OBD instrumentation and dynamometer conditions. Fleet studies such as
+Prytz et al.~\cite{prytz2015} have real repair labels but proprietary
+telematics access. OBD-II studies such as Shafi et al.~\cite{shafi2018}
+run on the consumer port but lack independently verified fault labels.
+No surveyed work trains and evaluates on the 1\,Hz consumer interface with
+trustworthy fault ground truth --- because the data to do so does not
+publicly exist.
+
+\textbf{Single-vehicle scope is the norm, and transfer is untested.} The
+carOBD corpus is one Etios; EngineFaultDB is one bench engine; most OBD-II
+papers instrument one car. Almost none of the surveyed systems state what
+happens when the trained model meets a different vehicle --- different
+idle speed, different trim baseline, different PID set. In our experience
+that encounter is where deployments actually fail.
+
+\textbf{Missing sensors are not handled honestly.} Every surveyed system
+assumes its input channels exist. But PID support varies car to car: our
+own test vehicle exposes no MAP sensor, the primary channel for one of our
+four fault classes. No prior system we found defines what it reports when
+the evidence for a fault class is physically absent.
+
+\textbf{Synthetic injection, where used, is not physics-audited.} Adding
+offsets or noise to sensor channels is common in anomaly detection
+research, but the surveyed automotive works do not constrain injected
+values to ECU causality --- fuel trims that lead instead of react, coolant
+that jumps faster than thermal mass allows, MAP exceeding barometric
+pressure. Models trained on physically impossible signatures learn
+artifacts that no real fault will ever reproduce.
+
+\subsection{How This Project Fills the Gap}
+
+Against the first gap, we accept the absence of real-fault data as a design
+input rather than pretending otherwise: we train on physics-constrained
+synthetic faults injected into real 1\,Hz driving data, we measure how much
+the scores depend on the injector's own coefficients (the withheld-parameter
+experiment of Section~\ref{sec:evalmethod}), and we label every reported
+number as synthetic self-consistency. The deliverable is a detection
+algorithm plus a collection protocol, and the report never claims more.
+
+Against the second, every feature is z-scored against the source vehicle's
+own healthy baseline (Section~\ref{sec:features}), so the model reasons in
+``standard deviations from this car's normal'' rather than raw units, and
+the deployed pipeline re-fits that baseline per vehicle. Our evaluation
+splits by session and by session \emph{family}, the closest available proxy
+for context transfer within a single-vehicle corpus.
+
+Against the third, the pipeline carries an explicit evaluability contract:
+each fault class declares the PIDs its primary signature requires, and a
+vehicle that lacks them gets ``Untested'' for that class instead of a score
+(Section~\ref{sec:dashboard}). Chapter~\ref{ch:results} shows this contract
+working on a real MAF-based car.
+
+Against the fourth, the injection engine enforces hard physical clamps and
+documented ECU response dynamics --- including the speed-density vacuum-leak
+behavior and the STFT-to-LTFT handoff --- with every injection reproducible
+from stored parameters (Section~\ref{sec:injector}). The physics arguments
+are written into the source alongside the code they constrain.

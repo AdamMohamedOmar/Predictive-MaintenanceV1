@@ -1,0 +1,211 @@
+\section{Introduction}
+\label{ch:intro}
+
+\subsection{Overview}
+
+Every passenger car built since the mid-1990s carries a diagnostic socket
+under its dashboard. Through that socket --- the OBD-II port --- the engine
+control unit (ECU) will answer questions about itself once per second:
+engine speed, coolant temperature, how much fuel correction it is currently
+applying, how far the throttle plate is open, and dozens more. A ten-dollar
+ELM327 Bluetooth adapter turns any phone into a reader for this stream.
+The data is there, in every car, all the time.
+
+What the industry does with that stream is mostly reactive. The ECU compares
+individual sensors against fixed thresholds, and when one is crossed for long
+enough, it stores a diagnostic trouble code (DTC) and lights the check-engine
+lamp. By that point the fault is established. The slow drift that preceded it
+--- a fuel trim creeping upward for weeks as an injector clogs, an idle speed
+rising a little as a vacuum line cracks --- is visible in the sensor stream
+long before any threshold trips, but nothing in the standard diagnostic chain
+looks for it.
+
+We built a system that looks for it. The system ingests the 1\,Hz OBD-II
+stream, summarizes each 60-second window of driving into a feature vector,
+and classifies the engine's state into healthy, cold-start, or one of four
+developing fault classes. It runs on a laptop, takes its data from either a
+recorded CSV file or a live Bluetooth adapter, explains each prediction in
+terms of the sensors that drove it, and ends every session with a plain
+verdict about the engine's health. Alongside the analysis pipeline we built
+an Android application, OBD-LOG, that performs the vehicle-side data
+collection on real cars.
+
+One fact shapes the entire project, and we state it here rather than bury it:
+there is no public dataset of real, labeled engine faults recorded through
+OBD-II at 1\,Hz. Nobody has published one. Our models are therefore trained
+on \emph{synthetic} faults --- physically grounded modifications injected
+into 84.5 hours of real healthy driving data. Chapter~\ref{ch:results}
+quantifies exactly what that means for how the results should be read.
+
+\subsection{Problem Statement}
+
+Given a stream of standard OBD-II sensor readings sampled at approximately
+1\,Hz from an unmodified passenger car, decide --- within about a minute of
+data --- whether the engine is behaving normally, warming up from a cold
+start, or exhibiting the early signature of one of four common fault classes:
+an intake vacuum leak, a fuel delivery restriction, a stuck coolant
+temperature sensor, or a worn throttle position sensor. The decision must
+come with an explanation a mechanic can check, must transfer to vehicles the
+model has never seen, and must refuse to answer rather than guess when the
+target vehicle does not expose the sensors a given fault requires.
+
+Three properties of the setting make this harder than a textbook
+classification exercise. The data rate is low: at 1\,Hz, combustion-level
+events are invisible, and only slow aggregate signatures survive. The
+labels do not exist: healthy public data is plentiful, but labeled fault
+data at this rate is not, so the training signal has to be synthesized
+without violating engine physics. And the deployment target varies: two cars
+expose different PID sets, idle at different speeds, and trim fuel around
+different baselines, so a model fitted to one car's raw values fails on the
+next car for reasons that have nothing to do with faults.
+
+\subsection{Motivation and Application}
+
+The gap between ``data available'' and ``warning delivered'' is the
+motivation. A drivetrain fault that is caught while it is still a drifting
+sensor value costs a hose clamp or a sensor swap; the same fault caught at
+the DTC stage may have been degrading fuel economy for months, and caught at
+the breakdown stage it costs a tow. Fleet operators already pay for
+telematics systems that promise early warning, but those systems are
+proprietary, and the published research behind them almost never operates on
+the 1\,Hz consumer-grade interface that ordinary vehicles actually expose.
+
+Consider the concrete case of a clogging fuel injector. Early, it shows only
+as a long-term fuel trim that has crept from its normal few percent to eight
+or nine, correcting for a mixture that is running slightly lean. The car
+drives fine; the driver notices nothing; no code is stored. Weeks later the
+trim saturates at its limit, the mixture goes lean under load, and now there
+is a misfire code, a rough idle, and possibly a damaged catalytic converter
+downstream. The whole trajectory was visible in one PID from the first week.
+A tool that flagged the drift at week one turns a converter and an injector
+into just an injector, and turns a roadside stall into a scheduled
+appointment. That is the value proposition in a single fault, and three of
+our four fault classes tell structurally similar stories.
+
+The intended applications are concrete. A workshop can replay a customer's
+recorded drive and get a per-fault verdict with sensor-level evidence. A
+student or hobbyist can point the dashboard at a live car and watch the
+classifier, the fuel trims, and the SHAP explanation update together. A
+fleet, with the future-work pipeline of Section~\ref{sec:future}, could
+stream many vehicles into the same scoring backend. In every case the
+hardware cost is a phone and an ELM327 adapter --- perhaps fifteen dollars
+of equipment reading data the car already computes and publishes for free.
+
+There is also a methodological application that outlives this particular
+system. The fault injection engine of Section~\ref{sec:injector} is a
+worked answer to a question many practitioners face: how do you train a
+detector when the failure data does not exist? Our answer --- inject faults
+into real healthy data under hard physical constraints, document every
+parameter, and measure how much the scores depend on the injector's own
+settings --- is reusable well beyond these four fault classes.
+
+\subsection{Challenges}
+
+The project's difficulties were not where we first expected them. Put
+simply, the models were the easy part; the data was not.
+
+\begin{itemize}
+  \item \textbf{A corrupted-looking corpus.} Our first audit of the public
+    carOBD dataset concluded that 120 of its 129 files contained physically
+    impossible sensor values and had to be discarded. The real cause turned
+    out to be a single-character CSV parsing defect --- a trailing comma
+    that silently shifted every column one position left. Diagnosing this
+    took longer than training any model in this report, and
+    Section~\ref{sec:dataset} documents it in full.
+  \item \textbf{Synthesizing faults without lying about physics.} A naive
+    fault injector produces textbook signatures that real ECUs never emit.
+    A vacuum leak on a speed-density engine, for example, does \emph{not}
+    produce the large fuel-trim swing the textbooks describe, because the
+    MAP sensor sees the leak directly and the ECU compensates. Getting each
+    of the four fault models to match documented ECU behavior forced us to
+    discard and rewrite our first implementations.
+  \item \textbf{Evaluation that does not flatter itself.} Windows cut from
+    the same drive overlap by up to 50 of their 60 rows. Any split that
+    mixes one session's windows across train and test leaks information and
+    inflates F1 by 10--20 points. We had to lock session-level splitting in
+    as a tested invariant, and we had to accept that our headline numbers
+    measure self-consistency with our own injector, not field detection.
+  \item \textbf{Cross-vehicle reality.} The training vehicle (Toyota Etios)
+    is a speed-density car with a MAP sensor; our test vehicle (Toyota
+    Yaris) is MAF-based and reports no MAP at all. The first deployment on
+    the healthy Yaris produced a confident, entirely wrong fault alarm, and
+    fixing that failure properly reshaped the system's reporting layer.
+  \item \textbf{Throughput of consumer hardware.} A real ELM327 clone polls
+    7 PIDs at 1.10\,Hz but 21 PIDs at only 0.37\,Hz. Choosing which PIDs
+    are worth their cost in sample rate became a design decision with
+    measured trade-offs, not a footnote.
+\end{itemize}
+
+None of these five were solved by writing more machine learning code. Each
+one was a data problem, a physics problem, or a hardware problem first, and
+the model only got to be as good as the data underneath it allowed. That
+ordering --- fix the data, then fit the model --- turned out to be the
+project's actual methodology, even though it was not the one we set out
+with in Week~1.
+
+\subsection{Objectives}
+
+\begin{enumerate}
+  \item Recover and validate the full 129-session carOBD corpus, with a
+    loud, tested guard against the column-shift defect that had hidden
+    93\,\% of it.
+  \item Build a fault injection engine for four fault classes, in ramp and
+    step modes, in which every written value is clamped to engine physics
+    and every injection is reproducible from stored parameters.
+  \item Design a vehicle-agnostic feature representation --- 83 features
+    per 60-second window, z-scored against the source vehicle's own healthy
+    baseline --- that lets a model trained on one car run on another.
+  \item Train and evaluate a six-class XGBoost classifier under
+    session-level and family-level cross-validation, reporting synthetic
+    self-consistency scores as exactly that.
+  \item Complement the classifier with a per-PID forecaster and a one-class
+    anomaly detector, and report honestly where they fail (long-term fuel
+    trim forecasting fails).
+  \item Build the OBD-LOG Android app for real-vehicle data collection over
+    Bluetooth, with tiered PID selection driven by measured poll rates.
+  \item Deploy the full pipeline against real recordings from an unseen
+    vehicle, and design the reporting layer so that missing sensors produce
+    ``Untested'' verdicts rather than fabricated scores.
+  \item Deliver a live dashboard that shows the classification, its SHAP
+    explanation, physics-based severity, and an end-of-read health report.
+\end{enumerate}
+
+\subsection{Ethics}
+
+No physical fault was induced on any vehicle at any point in this project.
+Every fault our models were trained on is synthetic, and every real
+recording we scored came from a healthy, unmodified car. We considered
+inducing a real vacuum leak under supervision and decided against it for
+this phase; the documented collection protocol in the repository specifies
+how to do it safely if a future team takes that step, with a mechanic
+present and abort conditions defined in advance.
+
+All driving data we collected ourselves was recorded on public roads with
+the driver's knowledge and consent, at legal speeds, with the phone mounted
+and the app operated by a passenger. The carOBD corpus we trained on is
+public, published by its author for research use, and credited in
+Chapter~\ref{ch:literature} and the references.
+
+The system's outputs are advisory. A classifier label on a dashboard is not
+a diagnosis, and the report says so on its face: every end-of-read verdict
+carries its caveats in the rendered output, including the synthetic origin
+of the training data and the conditions under which the verdict is
+unreliable. A qualified mechanic must confirm any suspected fault before a
+repair decision is made. We consider the refusal behaviors --- ``Untested''
+when a required sensor is absent, ``insufficient data'' when too few windows
+are evaluable --- to be ethics features as much as engineering ones, because
+the alternative is a tool that manufactures confident false alarms, and we
+watched an early version of our own system do exactly that.
+
+\subsection{Report Layout}
+
+Chapter~\ref{ch:literature} surveys prior work on OBD-II diagnostics and
+machine learning for predictive maintenance, and identifies the gap this
+project fills. Chapter~\ref{ch:system} describes the proposed system:
+architecture, the Android data-collection app, the dataset and its recovery,
+the fault injection engine, feature engineering, the models, and the
+dashboard. Chapter~\ref{ch:results} presents the evaluation methodology and
+results, including the real-vehicle deployment and the failures we kept.
+Chapter~\ref{ch:conclusion} concludes with limitations, stated plainly, and
+a prioritized future-work list. The appendices contain the key source code
+listings from both repositories and the full per-class metric tables.

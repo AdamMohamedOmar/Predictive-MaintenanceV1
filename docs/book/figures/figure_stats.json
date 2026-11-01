@@ -1,0 +1,24 @@
+{
+  "n_files": 129,
+  "n_rows": 304299,
+  "hours": 84.5,
+  "n_windows": 29724,
+  "families": {
+    "drive": 13,
+    "idle": 47,
+    "live": 39,
+    "long": 12,
+    "ufpe": 18
+  },
+  "regime_share_pct": {
+    "cold_start": 4.6,
+    "warmup": 8.1,
+    "idle": 23.0,
+    "accel": 1.4,
+    "cruise": 62.9
+  },
+  "duplicate_rows": 29329,
+  "naive_timing_max": 776.599976,
+  "fixed_timing_min": -24.0,
+  "fixed_timing_max": 35.0
+}

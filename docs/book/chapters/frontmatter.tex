@@ -1,0 +1,298 @@
+% ─────────────────────────── COVER PAGE ───────────────────────────
+\begin{titlepage}
+\centering
+\vspace{-0.8cm}
+\includegraphics[width=3.2cm]{aast.png}\par
+\vspace{0.4cm}
+{\large\bfseries Arab Academy for Science, Technology and Maritime Transport\par}
+\vspace{0.4cm}
+{\normalsize College of Engineering and Technology\par}
+{\normalsize Computer Engineering Department\par}
+\vspace{1.2cm}
+{\normalsize B.Sc.\ Final Year Project\par}
+\vspace{1.8cm}
+{\LARGE\bfseries \projecttitle\par}
+\vspace{2.2cm}
+{\normalsize\bfseries Presented by:\par}
+\vspace{0.4cm}
+\begin{tabular}{ll}
+Omar Hossam Eldin Mohamed Hafez & Reg.\ No.\ 20101737\\
+Mohamed Sameh Mohamed Mohamed El Bassuni & Reg.\ No.\ 18100896\\
+Mohamed Mohamed Talaat Abokhatwa & Reg.\ No.\ 12103172\\
+Ahmed Abdelaal Saad & Reg.\ No.\ 16101027\\
+Adam Mohamed Ibrahim & Reg.\ No.\ 20101978\\
+\end{tabular}
+\vspace{1.8cm}
+
+{\normalsize\bfseries Supervised by:\par}
+\vspace{0.4cm}
+{\normalsize Yahia Elderiny\par}
+{\normalsize Rania Kadry\par}
+\vfill
+{\normalsize July --- 2026\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+\setcounter{page}{2}
+
+% ─────────────────────────── DECLARATION ───────────────────────────
+\clearpage
+\section*{Declaration}
+\addcontentsline{toc}{section}{Declaration}
+
+I hereby certify that this report, which I am now submitting for evaluation on
+the study program leading to the award of Bachelor of Science in Computer
+Engineering, is all my own work and contains no plagiarism. I comply with the
+following terms when submitting this report:
+
+Any text, diagrams or other material copied from other sources (including, but
+not limited to, books, journals, and the internet) have been clearly
+acknowledged and cited, followed by the reference number used, either in the
+text or in a footnote/endnote. The details of the used references that are
+listed at the end of the report conform to the referencing style dictated by
+the final year project template and are, to my knowledge, accurate and
+complete.
+
+I have read the sections on referencing and plagiarism in the final year
+project template. I understand that plagiarism can lead to a reduced or fail
+grade, in serious cases, for the Graduation Project course.
+
+\vspace{0.8cm}
+\noindent
+\begin{tabular}{@{}p{0.48\textwidth}p{0.48\textwidth}@{}}
+\textbf{Student name:} Omar Hossam Eldin Mohamed Hafez & \textbf{Student name:} Mohamed Sameh Mohamed Mohamed El Bassuni\\
+Registration number: 20101737 & Registration number: 18100896\\
+Signed: \rule{3cm}{0.3pt} & Signed: \rule{3cm}{0.3pt}\\
+Date: \rule{3cm}{0.3pt} & Date: \rule{3cm}{0.3pt}\\[0.6cm]
+\textbf{Student name:} Mohamed Mohamed Talaat Abokhatwa & \textbf{Student name:} Ahmed Abdelaal Saad\\
+Registration number: 12103172 & Registration number: 16101027\\
+Signed: \rule{3cm}{0.3pt} & Signed: \rule{3cm}{0.3pt}\\
+Date: \rule{3cm}{0.3pt} & Date: \rule{3cm}{0.3pt}\\[0.6cm]
+\textbf{Student name:} Adam Mohamed Ibrahim & \\
+Registration number: 20101978 & \\
+Signed: \rule{3cm}{0.3pt} & \\
+Date: \rule{3cm}{0.3pt} & \\
+\end{tabular}
+
+% ─────────────────────────── PROJECT SUMMARY ───────────────────────────
+\clearpage
+\section*{Senior Project Summary Report}
+\addcontentsline{toc}{section}{Senior Project Summary Report}
+
+\begin{center}
+Arab Academy for Science, Technology and Maritime Transport\\
+College of Engineering and Technology --- Department of Computer Engineering\\
+Academic Year: 2025/2026 \qquad Semester: 10
+\end{center}
+
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{@{}p{0.24\textwidth}p{0.72\textwidth}@{}}
+\toprule
+\textbf{Project title} & \projecttitle\\
+\midrule
+\textbf{Supervisor(s)} & Yahia Elderiny; Rania Kadry\\
+\midrule
+\textbf{Team members} &
+Omar Hossam Eldin Mohamed Hafez --- 20101737\newline
+Mohamed Sameh Mohamed Mohamed El Bassuni --- 18100896\newline
+Mohamed Mohamed Talaat Abokhatwa --- 12103172\newline
+Ahmed Abdelaal Saad --- 16101027\newline
+Adam Mohamed Ibrahim --- 20101978\\
+\midrule
+\textbf{Project deliverables} &
+A physics-constrained fault injection engine for OBD-II time series; a
+six-class XGBoost fault classifier with SHAP explanations; a PID forecaster
+and one-class anomaly detector; an Android data-collection app (OBD-LOG); a
+Streamlit dashboard with an end-of-read health report; and a documented
+protocol for future real-fault data collection.\\
+\midrule
+\textbf{Description} &
+The system reads live engine sensor data through the standard OBD-II port at
+1\,Hz, converts 60-second windows into 83 vehicle-agnostic features, and
+classifies the engine state into healthy, cold-start, or one of four
+developing fault classes (vacuum leak, fuel delivery, coolant sensor,
+throttle sensor). Because no public real-fault OBD-II dataset exists at this
+sample rate, training data is produced by injecting physically plausible
+fault signatures into 84.5 hours of real healthy driving data. The pipeline
+transfers across vehicles by z-scoring every feature against the target
+car's own healthy baseline, and it reports ``Untested'' for any fault whose
+required sensor a given car does not expose.\\
+\midrule
+\textbf{Engineering standards} &
+SAE J1979 (OBD-II diagnostic services and PID definitions); ISO 15765-4
+(CAN transport for diagnostics); ELM327 AT command set for adapter control;
+OBD-II physical ranges used as hard clamps in the injection engine (fuel
+trim $\pm$25\,\%, timing advance $\pm$64$^{\circ}$).\\
+\midrule
+\textbf{Design constraints} &
+1\,Hz sampling ceiling of consumer ELM327 adapters (measured 0.37--1.10\,Hz
+depending on PID count); Bluetooth Classic SPP throughput; per-vehicle PID
+availability (the test Yaris exposes no MAP sensor); no labeled real-fault
+data available anywhere at 1\,Hz; laptop-only inference (no cloud
+dependency for the demo); all injected values clamped to engine physics.\\
+\midrule
+\textbf{Project impact} &
+Earlier warning of developing engine faults than the check-engine light,
+using hardware the average driver can afford (a phone plus a
+\$10 adapter); a reusable, physics-grounded methodology for synthesizing
+labeled fault data where none exists; an honest evaluation framework that
+reports what it cannot test instead of fabricating scores.\\
+\midrule
+\textbf{Team organization} &
+Omar Hossam Eldin Mohamed Hafez --- data pipeline and fault injection.\newline
+Mohamed Sameh Mohamed Mohamed El Bassuni --- Android application and vehicle testing.\newline
+Mohamed Mohamed Talaat Abokhatwa --- feature engineering and classifier.\newline
+Ahmed Abdelaal Saad --- forecaster, anomaly detection, evaluation.\newline
+Adam Mohamed Ibrahim --- dashboard, integration, documentation.\\
+\midrule
+\textbf{Ethics / safety} &
+No physical fault was induced on any test vehicle. All driving data was
+collected on public roads with the driver's consent, at legal speeds, with
+the phone mounted and operated by a passenger. Model outputs are advisory
+only; a qualified mechanic must confirm any suspected fault before repair
+decisions. The synthetic origin of all fault labels is disclosed in every
+result table.\\
+\bottomrule
+\end{longtable}
+
+\vspace{0.6cm}
+\noindent Main Supervisor Signature: \rule{5cm}{0.3pt}
+
+% ─────────────────────────── STUDENTS CONTRIBUTION ───────────────────────────
+\clearpage
+\section*{Students Contribution}
+\addcontentsline{toc}{section}{Students Contribution}
+
+\begin{center}
+\projecttitle\\[0.4cm]
+Submitted by: Omar Hossam Eldin Mohamed Hafez, Mohamed Sameh Mohamed Mohamed El Bassuni, Mohamed Mohamed Talaat Abokhatwa, Ahmed Abdelaal Saad, Adam Mohamed Ibrahim
+\end{center}
+
+\vspace{0.5cm}
+\begin{center}
+\begin{tabular}{clp{5.5cm}}
+\toprule
+\textbf{Chapter} & \textbf{Title} & \textbf{Contributors}\\
+\midrule
+1 & Introduction & Omar Hossam Eldin Mohamed Hafez\newline Adam Mohamed Ibrahim\\
+\addlinespace
+2 & Literature Survey and Related Work & Mohamed Sameh Mohamed Mohamed El Bassuni\newline Mohamed Mohamed Talaat Abokhatwa\\
+\addlinespace
+3 & The Proposed System & Omar Hossam Eldin Mohamed Hafez\newline Mohamed Sameh Mohamed Mohamed El Bassuni\newline Mohamed Mohamed Talaat Abokhatwa\\
+\addlinespace
+4 & Experimental Results and Evaluation & Ahmed Abdelaal Saad\newline Adam Mohamed Ibrahim\\
+\addlinespace
+5 & Conclusion and Future Work & Ahmed Abdelaal Saad\newline Adam Mohamed Ibrahim\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────── ACKNOWLEDGMENT ───────────────────────────
+\clearpage
+\section*{Acknowledgment}
+\addcontentsline{toc}{section}{Acknowledgment}
+
+We wish to express our sincere gratitude to all those who gave us the
+opportunity to make tangible progress in this project.
+
+First and foremost, we thank God Almighty for giving us the strength,
+knowledge, ability and opportunity to undertake this work and to persevere
+and complete it satisfactorily.
+
+Special appreciation for the supervision, advice and continuous encouragement
+goes to our advisors, Yahia Elderiny and Rania Kadry.
+
+We would also like to thank the Arab Academy for Science, Technology and
+Maritime Transport for the facilities and support that made this project
+possible, and Eron J.\ Maranh\~ao for publishing the carOBD dataset that our
+training pipeline is built on.
+
+Last but not least, our heartfelt gratitude goes to our families for their
+support throughout the year, and to the long-suffering 2015 Toyota Yaris that
+idled through every data-collection session without complaint.
+
+% ─────────────────────────── ABSTRACT ───────────────────────────
+\clearpage
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
+
+Modern cars continuously report engine sensor data through the standardized
+OBD-II port, yet that data is used almost exclusively after a fault has
+already tripped a diagnostic trouble code. This project builds a predictive
+maintenance system that watches the sensor stream itself and flags a
+developing fault before the check-engine light fires. The system reads
+14 engine parameters at 1\,Hz, summarizes each 60-second window into 83
+vehicle-agnostic features, and classifies the window into healthy,
+cold-start, or one of four fault classes: intake vacuum leak, fuel delivery
+fault, coolant temperature sensor fault, and throttle position sensor fault.
+
+No public OBD-II dataset with labeled real faults exists at this sample rate,
+so we trained on synthetic faults injected into 84.5 hours of real healthy
+driving data from the public carOBD corpus --- 129 sessions that we recovered
+from an upstream CSV parsing defect which had previously made 120 of them
+appear corrupt. The injection engine is physics-constrained: every written
+value respects engine causality, from the 1$^{\circ}$C-per-second thermal
+inertia of coolant to the short-term-to-long-term fuel trim handoff of a real
+adaptive ECU. An XGBoost classifier reaches a leave-one-family-out macro-F1
+of 0.977 (worst family 0.958), and we report these numbers explicitly as
+synthetic self-consistency scores, not as proof of real-fault detection. On a
+real, healthy 2015 Toyota Yaris the deployed pipeline correctly declared the
+air-system class Untested (the car has no MAP sensor) and refused to issue a
+verdict on insufficient evaluable data --- behavior we argue is an
+engineering contribution in itself, because an earlier version of the same
+pipeline confidently reported a 97\,\% air-system fault on the same healthy
+car. The system ships with an Android data-collection app, a live Streamlit
+dashboard, and a documented protocol for the real-fault recordings that would
+convert the synthetic validation into field validation.
+
+% ─────────────────────────── TOC / LOF / LOT ───────────────────────────
+\clearpage
+\tableofcontents
+\clearpage
+\listoffigures
+\addcontentsline{toc}{section}{List of Figures}
+\listoftables
+\addcontentsline{toc}{section}{List of Tables}
+
+% ─────────────────────────── ACRONYMS ───────────────────────────
+\clearpage
+\section*{List of Acronyms}
+\addcontentsline{toc}{section}{List of Acronyms}
+
+\begin{acronym}[XGBoost]
+  \acro{OBD-II}{On-Board Diagnostics, second generation --- the standardized
+    vehicle diagnostic interface mandated on passenger cars since 1996}
+  \acro{PID}{Parameter ID --- one addressable sensor or computed value in the
+    OBD-II protocol (e.g.\ 0x0C = engine RPM)}
+  \acro{ELM327}{The de-facto standard microcontroller that bridges the OBD-II
+    bus to a serial (Bluetooth/USB) link using AT commands}
+  \acro{ECU}{Engine Control Unit --- the embedded computer that manages
+    fueling, ignition and emissions}
+  \acro{MAF}{Mass Air Flow sensor --- measures intake airflow directly}
+  \acro{MAP}{Manifold Absolute Pressure sensor --- measures intake manifold
+    pressure; the airflow reference on speed-density engines}
+  \acro{XGBoost}{eXtreme Gradient Boosting --- a gradient-boosted decision
+    tree library}
+  \acro{SHAP}{SHapley Additive exPlanations --- a game-theoretic method for
+    attributing a model prediction to its input features}
+  \acro{ML}{Machine Learning}
+  \acro{LOFO}{Leave-One-Family-Out cross-validation (holding out an entire
+    session family, e.g.\ all idle recordings)}
+  \acro{LOSO}{Leave-One-Session-Out cross-validation}
+  \acro{LTFT}{Long-Term Fuel Trim --- the ECU's learned, persistent fuel
+    correction, in percent}
+  \acro{STFT}{Short-Term Fuel Trim --- the ECU's fast, oscillating fuel
+    correction, in percent}
+  \acro{DTC}{Diagnostic Trouble Code --- the standardized fault code that
+    turns on the check-engine light}
+  \acro{API}{Application Programming Interface}
+  \acro{CSV}{Comma-Separated Values file format}
+  \acro{RPM}{Revolutions Per Minute (engine speed)}
+  \acro{IAT}{Intake Air Temperature}
+  \acro{TPS}{Throttle Position Sensor}
+  \acro{APK}{Android Package --- the installable Android application format}
+  \acro{BOM}{Byte Order Mark --- a Unicode signature at the start of a text file}
+  \acro{Kafka}{Apache Kafka --- a distributed event-streaming platform}
+  \acro{REST}{REpresentational State Transfer --- an HTTP API architectural style}
+\end{acronym}
+\clearpage

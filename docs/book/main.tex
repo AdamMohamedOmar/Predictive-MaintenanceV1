@@ -1,0 +1,109 @@
+% Graduation project book — Predictive Maintenance for OBD-II Engine Faults
+% AAST College of Engineering and Technology, Computer Engineering Department
+% Build: pdflatex main && bibtex main && pdflatex main && pdflatex main
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{acronym}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+
+% ── Typography and layout ────────────────────────────────────────────────────
+\onehalfspacing
+\setlength{\parskip}{4pt}
+
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.6em}{}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Predictive Maintenance for OBD-II Engine Faults}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ── Code listings ─────────────────────────────────────────────────────────────
+\definecolor{codebg}{RGB}{247,247,245}
+\definecolor{codecomment}{RGB}{90,120,90}
+\definecolor{codekw}{RGB}{0,70,160}
+\definecolor{codestr}{RGB}{150,60,20}
+
+\lstdefinestyle{pystyle}{
+  language=Python,
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  commentstyle=\color{codecomment}\itshape,
+  keywordstyle=\color{codekw}\bfseries,
+  stringstyle=\color{codestr},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=6pt,
+  breaklines=true,
+  breakatwhitespace=true,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+  frame=single,
+  framerule=0.2pt,
+  showstringspaces=false,
+  tabsize=4,
+  captionpos=b,
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={°}{{\textdegree}}1 {±}{{$\pm$}}1 {→}{{$\to$}}1 {←}{{$\leftarrow$}}1
+           {−}{{$-$}}1
+           {≈}{{$\approx$}}1 {≤}{{$\le$}}1 {≥}{{$\ge$}}1 {σ}{{$\sigma$}}1
+           {Δ}{{$\Delta$}}1 {×}{{$\times$}}1 {—}{{---}}1 {–}{{--}}1
+           {‘}{{`}}1 {’}{{'}}1 {“}{{``}}1 {”}{{''}}1 {…}{{...}}3 {│}{{|}}1
+           {├}{{|-}}2 {└}{{|-}}2 {─}{{-}}1 {∞}{{$\infty$}}1 {≠}{{$\ne$}}1
+           {œ}{{oe}}1 {á}{{\'a}}1 {ã}{{\~a}}1 {é}{{\'e}}1 {ö}{{\"o}}1,
+}
+\lstdefinestyle{ktstyle}{
+  style=pystyle,
+  language=Java,   % closest built-in lexer for Kotlin
+  morekeywords={fun,val,var,object,data,when,companion,override,lateinit,init},
+}
+
+% ── Acronyms convenience ─────────────────────────────────────────────────────
+\newcommand{\projecttitle}{Predictive Maintenance for OBD-II Engine Faults}
+
+\begin{document}
+
+% ═══════════════════ FRONT MATTER ═══════════════════
+\input{chapters/frontmatter}
+
+% ═══════════════════ CHAPTERS ═══════════════════
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{chapters/ch1_introduction}
+\clearpage
+\input{chapters/ch2_literature}
+\clearpage
+\input{chapters/ch3_system}
+\clearpage
+\input{chapters/ch4_results}
+\clearpage
+\input{chapters/ch5_conclusion}
+\clearpage
+
+% ═══════════════════ REFERENCES ═══════════════════
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\clearpage
+
+% ═══════════════════ APPENDICES ═══════════════════
+\input{chapters/appendices}
+
+\end{document}

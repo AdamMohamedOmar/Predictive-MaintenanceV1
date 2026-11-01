@@ -1,0 +1,204 @@
+\relax 
+\AC@reset@newl@bel
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{Declaration}{ii}{Doc-Start}\protected@file@percent }
+\gdef \LT@i {\LT@entry 
+    {1}{115.26108pt}\LT@entry 
+    {1}{333.7763pt}}
+\@writefile{toc}{\contentsline {section}{Senior Project Summary Report}{iii}{Doc-Start}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Students Contribution}{vi}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Acknowledgment}{vii}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Abstract}{viii}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{List of Figures}{xi}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{List of Tables}{xii}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{List of Acronyms}{xiii}{table.1}\protected@file@percent }
+\newacro{OBD-II}[\AC@hyperlink{OBD-II}{OBD-II}]{On-Board Diagnostics, second generation --- the standardized vehicle diagnostic interface mandated on passenger cars since 1996}
+\newacro{PID}[\AC@hyperlink{PID}{PID}]{Parameter ID --- one addressable sensor or computed value in the OBD-II protocol (e.g.\ 0x0C = engine RPM)}
+\newacro{ELM327}[\AC@hyperlink{ELM327}{ELM327}]{The de-facto standard microcontroller that bridges the OBD-II bus to a serial (Bluetooth/USB) link using AT commands}
+\newacro{ECU}[\AC@hyperlink{ECU}{ECU}]{Engine Control Unit --- the embedded computer that manages fueling, ignition and emissions}
+\newacro{MAF}[\AC@hyperlink{MAF}{MAF}]{Mass Air Flow sensor --- measures intake airflow directly}
+\newacro{MAP}[\AC@hyperlink{MAP}{MAP}]{Manifold Absolute Pressure sensor --- measures intake manifold pressure; the airflow reference on speed-density engines}
+\newacro{XGBoost}[\AC@hyperlink{XGBoost}{XGBoost}]{eXtreme Gradient Boosting --- a gradient-boosted decision tree library}
+\newacro{SHAP}[\AC@hyperlink{SHAP}{SHAP}]{SHapley Additive exPlanations --- a game-theoretic method for attributing a model prediction to its input features}
+\newacro{ML}[\AC@hyperlink{ML}{ML}]{Machine Learning}
+\newacro{LOFO}[\AC@hyperlink{LOFO}{LOFO}]{Leave-One-Family-Out cross-validation (holding out an entire session family, e.g.\ all idle recordings)}
+\newacro{LOSO}[\AC@hyperlink{LOSO}{LOSO}]{Leave-One-Session-Out cross-validation}
+\newacro{LTFT}[\AC@hyperlink{LTFT}{LTFT}]{Long-Term Fuel Trim --- the ECU's learned, persistent fuel correction, in percent}
+\newacro{STFT}[\AC@hyperlink{STFT}{STFT}]{Short-Term Fuel Trim --- the ECU's fast, oscillating fuel correction, in percent}
+\newacro{DTC}[\AC@hyperlink{DTC}{DTC}]{Diagnostic Trouble Code --- the standardized fault code that turns on the check-engine light}
+\newacro{API}[\AC@hyperlink{API}{API}]{Application Programming Interface}
+\newacro{CSV}[\AC@hyperlink{CSV}{CSV}]{Comma-Separated Values file format}
+\newacro{RPM}[\AC@hyperlink{RPM}{RPM}]{Revolutions Per Minute (engine speed)}
+\newacro{IAT}[\AC@hyperlink{IAT}{IAT}]{Intake Air Temperature}
+\newacro{TPS}[\AC@hyperlink{TPS}{TPS}]{Throttle Position Sensor}
+\newacro{APK}[\AC@hyperlink{APK}{APK}]{Android Package --- the installable Android application format}
+\newacro{BOM}[\AC@hyperlink{BOM}{BOM}]{Byte Order Mark --- a Unicode signature at the start of a text file}
+\newacro{Kafka}[\AC@hyperlink{Kafka}{Kafka}]{Apache Kafka --- a distributed event-streaming platform}
+\newacro{REST}[\AC@hyperlink{REST}{REST}]{REpresentational State Transfer --- an HTTP API architectural style}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{ch:intro}{{1}{1}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Overview}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Problem Statement}{1}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Motivation and Application}{2}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Challenges}{3}{subsection.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Objectives}{4}{subsection.1.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.6}Ethics}{4}{subsection.1.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.7}Report Layout}{5}{subsection.1.7}\protected@file@percent }
+\citation{rimpas2020}
+\citation{shafi2018}
+\citation{maranhao_carobd}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Literature Survey and Related Work}{6}{section.2}\protected@file@percent }
+\newlabel{ch:literature}{{2}{6}{Literature Survey and Related Work}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Overview}{6}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Related Work}{6}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.1}Diagnostics on the OBD-II interface}{6}{subsubsection.2.2.1}\protected@file@percent }
+\citation{theissler2021}
+\citation{prytz2015}
+\citation{theissler2017}
+\citation{liu2008}
+\citation{vergara2023}
+\citation{chen2016}
+\citation{breiman2001}
+\citation{lundberg2017}
+\citation{saej1979}
+\citation{iso15765}
+\citation{pythonobd}
+\citation{streamlit}
+\citation{fastapi}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.2}Machine learning for automotive predictive maintenance}{7}{subsubsection.2.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.3}Models and attribution}{7}{subsubsection.2.2.3}\protected@file@percent }
+\citation{rimpas2020}
+\citation{shafi2018}
+\citation{prytz2015}
+\citation{vergara2023}
+\citation{theissler2017}
+\citation{vergara2023}
+\citation{prytz2015}
+\citation{shafi2018}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Related work along the two axes that matter for our problem: fault-label realism and data interface. No surveyed work combines verified faults with the 1\,Hz consumer OBD-II interface.}}{8}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:relwork}{{2}{8}{Related work along the two axes that matter for our problem: fault-label realism and data interface. No surveyed work combines verified faults with the 1\,Hz consumer OBD-II interface}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Gap Analysis}{8}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}How This Project Fills the Gap}{9}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}The Proposed System}{10}{section.3}\protected@file@percent }
+\newlabel{ch:system}{{3}{10}{The Proposed System}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}System Architecture}{10}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:architecture}{{3.1}{10}{System Architecture}{subsection.3.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System architecture. The top row is the acquisition path on the vehicle; the middle row is the training pipeline built on the carOBD corpus; the bottom row is the inference path that scores recordings and drives the dashboard.}}{10}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{10}{System architecture. The top row is the acquisition path on the vehicle; the middle row is the training pipeline built on the carOBD corpus; the bottom row is the inference path that scores recordings and drives the dashboard}{figure.caption.2}{}}
+\citation{iso15765}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Data Collection --- the OBD-LOG Android App}{11}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:android}{{3.2}{11}{Data Collection --- the OBD-LOG Android App}{subsection.3.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Measured poll rate versus polled PID count (2015 Toyota Yaris, ELM327 Bluetooth clone, parked idle).}}{11}{table.caption.3}\protected@file@percent }
+\newlabel{tab:pollrate}{{3}{11}{Measured poll rate versus polled PID count (2015 Toyota Yaris, ELM327 Bluetooth clone, parked idle)}{table.caption.3}{}}
+\citation{maranhao_carobd}
+\citation{saej1979}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Dataset --- carOBD}{12}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:dataset}{{3.3}{12}{Dataset --- carOBD}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}The trailing-comma discovery}{12}{subsubsection.3.3.1}\protected@file@percent }
+\newlabel{sec:trailingcomma}{{3.3.1}{12}{The trailing-comma discovery}{subsubsection.3.3.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The column-shift defect seen through one PID. Left: under a bare \texttt  {read\_csv}, the TIMING\_ADVANCE column contains a large population far outside the $\pm $64$^{\circ }$ OBD-II bound (dashed lines), peaking at 776.6$^{\circ }$ --- catalyst temperatures wearing the wrong column name. Right: with \texttt  {index\_col=False} the same files yield $-24^{\circ }$ to $+35^{\circ }$, entirely inside the physical range. Note the logarithmic count axis.}}{13}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:timingfix}{{2}{13}{The column-shift defect seen through one PID. Left: under a bare \texttt {read\_csv}, the TIMING\_ADVANCE column contains a large population far outside the $\pm $64$^{\circ }$ OBD-II bound (dashed lines), peaking at 776.6$^{\circ }$ --- catalyst temperatures wearing the wrong column name. Right: with \texttt {index\_col=False} the same files yield $-24^{\circ }$ to $+35^{\circ }$, entirely inside the physical range. Note the logarithmic count axis}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Working PID set}{13}{subsubsection.3.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Fault Injection Engine}{14}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:injector}{{3.4}{14}{Fault Injection Engine}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Feature Engineering}{15}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:features}{{3.5}{15}{Feature Engineering}{subsection.3.5}{}}
+\citation{chen2016}
+\citation{breiman2001}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Model Development}{16}{subsection.3.6}\protected@file@percent }
+\newlabel{sec:models}{{3.6}{16}{Model Development}{subsection.3.6}{}}
+\citation{liu2008}
+\citation{streamlit}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Dashboard}{18}{subsection.3.7}\protected@file@percent }
+\newlabel{sec:dashboard}{{3.7}{18}{Dashboard}{subsection.3.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experimental Results and Evaluation}{19}{section.4}\protected@file@percent }
+\newlabel{ch:results}{{4}{19}{Experimental Results and Evaluation}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Evaluation Methodology}{19}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:evalmethod}{{4.1}{19}{Evaluation Methodology}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Classification Results}{20}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:classresults}{{4.2}{20}{Classification Results}{subsection.4.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Classifier results across evaluation paths. All numbers measure recovery of synthetically injected faults (self-consistency), not real-fault detection.}}{20}{table.caption.5}\protected@file@percent }
+\newlabel{tab:headline}{{4}{20}{Classifier results across evaluation paths. All numbers measure recovery of synthetically injected faults (self-consistency), not real-fault detection}{table.caption.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Per-class F1 for the worst LOFO fold (live family held out; 39 sessions, 30{,}336 test windows).}}{20}{table.caption.6}\protected@file@percent }
+\newlabel{tab:lofoworst}{{5}{20}{Per-class F1 for the worst LOFO fold (live family held out; 39 sessions, 30{,}336 test windows)}{table.caption.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Fixed-holdout confusion matrix for the six-class XGBoost classifier (sessions drive1 + live12; macro-F1 = 0.962).}}{22}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:confusion}{{3}{22}{Fixed-holdout confusion matrix for the six-class XGBoost classifier (sessions drive1 + live12; macro-F1 = 0.962)}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Data Exploration Results}{22}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:eda}{{4.3}{22}{Data Exploration Results}{subsection.4.3}{}}
+\newlabel{fig:families}{{4a}{23}{Sessions per family}{figure.caption.8}{}}
+\newlabel{sub@fig:families}{{a}{23}{Sessions per family}{figure.caption.8}{}}
+\newlabel{fig:regimes}{{4b}{23}{Windows per operating regime}{figure.caption.8}{}}
+\newlabel{sub@fig:regimes}{{b}{23}{Windows per operating regime}{figure.caption.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Corpus composition on both axes. By file count the idle family dominates (47 of 129); by 60-second windows, cruise dominates (62.9\,\%) because driving sessions are far longer than idle ones.}}{23}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:composition}{{4}{23}{Corpus composition on both axes. By file count the idle family dominates (47 of 129); by 60-second windows, cruise dominates (62.9\,\%) because driving sessions are far longer than idle ones}{figure.caption.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Distributions of the five key fault-bearing PIDs across all 129 files. Fuel trims are roughly symmetric and slightly rich-shifted with visible OBD-II quantization; coolant is bimodal (cold-start shoulder plus a warm-operation peak near 88--90$^{\circ }$C); MAP is multimodal from the idle/driving mixture; timing sits entirely inside its physical envelope.}}{23}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:distributions}{{5}{23}{Distributions of the five key fault-bearing PIDs across all 129 files. Fuel trims are roughly symmetric and slightly rich-shifted with visible OBD-II quantization; coolant is bimodal (cold-start shoulder plus a warm-operation peak near 88--90$^{\circ }$C); MAP is multimodal from the idle/driving mixture; timing sits entirely inside its physical envelope}{figure.caption.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Correlation heatmap of the 14 working PIDs over the full corpus.}}{24}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:corr}{{6}{24}{Correlation heatmap of the 14 working PIDs over the full corpus}{figure.caption.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Bivariate structure, colored by a row-level regime proxy. Left: MAP vs RPM separates the idle cluster from the driving cloud --- the region the air-system fault perturbs. Center: RPM vs speed resolves into discrete gear bands, a drivetrain sanity check that a residual column shift would scramble. Right: timing advance climbs and stabilizes as coolant warms --- the coupling the coolant-sensor fault exploits.}}{25}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:bivariate}{{7}{25}{Bivariate structure, colored by a row-level regime proxy. Left: MAP vs RPM separates the idle cluster from the driving cloud --- the region the air-system fault perturbs. Center: RPM vs speed resolves into discrete gear bands, a drivetrain sanity check that a residual column shift would scramble. Right: timing advance climbs and stabilizes as coolant warms --- the coupling the coolant-sensor fault exploits}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Real-Vehicle Testing}{25}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:realvehicle}{{4.4}{25}{Real-Vehicle Testing}{subsection.4.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Real-vehicle scoring outcomes on the healthy 2015 Toyota Yaris, with the Untested contract applied. Raw label counts are the classifier's per-window outputs before suppression.}}{26}{table.caption.12}\protected@file@percent }
+\newlabel{tab:yaris}{{6}{26}{Real-vehicle scoring outcomes on the healthy 2015 Toyota Yaris, with the Untested contract applied. Raw label counts are the classifier's per-window outputs before suppression}{table.caption.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Forecaster Results}{26}{subsection.4.5}\protected@file@percent }
+\newlabel{sec:forecastresults}{{4.5}{26}{Forecaster Results}{subsection.4.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces PID forecaster mean absolute error (z-units, 60\,s horizon, held-out sessions) versus the persistence baseline.}}{27}{table.caption.13}\protected@file@percent }
+\newlabel{tab:forecaster}{{7}{27}{PID forecaster mean absolute error (z-units, 60\,s horizon, held-out sessions) versus the persistence baseline}{table.caption.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Discussion}{27}{subsection.4.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion and Future Work}{29}{section.5}\protected@file@percent }
+\newlabel{ch:conclusion}{{5}{29}{Conclusion and Future Work}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Conclusions}{29}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Limitations}{30}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Future Work}{31}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:future}{{5.3}{31}{Future Work}{subsection.5.3}{}}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{rimpas2020}{1}
+\bibcite{shafi2018}{2}
+\bibcite{maranhao_carobd}{3}
+\bibcite{theissler2021}{4}
+\bibcite{prytz2015}{5}
+\bibcite{theissler2017}{6}
+\bibcite{liu2008}{7}
+\bibcite{vergara2023}{8}
+\bibcite{chen2016}{9}
+\bibcite{breiman2001}{10}
+\bibcite{lundberg2017}{11}
+\bibcite{saej1979}{12}
+\bibcite{iso15765}{13}
+\bibcite{pythonobd}{14}
+\bibcite{streamlit}{15}
+\bibcite{fastapi}{16}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Key Source Code Listings --- Analysis Pipeline}{35}{appendix.A}\protected@file@percent }
+\newlabel{app:python}{{A}{35}{Key Source Code Listings --- Analysis Pipeline}{appendix.A}{}}
+\newlabel{lst:injector}{{1}{35}{\texttt {src/injection/fault\_injector.py} --- the physics-constrained fault injection engine}{lstlisting.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}{\ignorespaces \texttt  {src/injection/fault\_injector.py} --- the physics-constrained fault injection engine.}}{35}{lstlisting.1}\protected@file@percent }
+\newlabel{lst:xgb}{{2}{44}{\texttt {src/models/xgb\_classifier.py} --- XGBoost training, evaluation, and persistence, including class-balance weights and the fuel-system down-weight}{lstlisting.2}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2}{\ignorespaces \texttt  {src/models/xgb\_classifier.py} --- XGBoost training, evaluation, and persistence, including class-balance weights and the fuel-system down-weight.}}{44}{lstlisting.2}\protected@file@percent }
+\newlabel{lst:report}{{3}{48}{\texttt {src/eval/session\_report.py} --- the end-of-read health report: 20\,\% self-baseline, physics-severity 95th percentile, inconclusive rule, and the minimum-evaluable-windows floor}{lstlisting.3}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3}{\ignorespaces \texttt  {src/eval/session\_report.py} --- the end-of-read health report: 20\,\% self-baseline, physics-severity 95th percentile, inconclusive rule, and the minimum-evaluable-windows floor.}}{48}{lstlisting.3}\protected@file@percent }
+\newlabel{lst:pidavail}{{4}{52}{\texttt {src/eval/pid\_availability.py} --- per-fault required PIDs and the Untested contract}{lstlisting.4}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4}{\ignorespaces \texttt  {src/eval/pid\_availability.py} --- per-fault required PIDs and the Untested contract.}}{52}{lstlisting.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Key Source Code Listings --- OBD-LOG Android App}{54}{appendix.B}\protected@file@percent }
+\newlabel{app:android}{{B}{54}{Key Source Code Listings --- OBD-LOG Android App}{appendix.B}{}}
+\newlabel{lst:obdpids}{{5}{54}{\texttt {ObdPids.kt} --- tiered PID definitions, decode formulas, and ELM327 reply parsing}{lstlisting.5}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {5}{\ignorespaces \texttt  {ObdPids.kt} --- tiered PID definitions, decode formulas, and ELM327 reply parsing.}}{54}{lstlisting.5}\protected@file@percent }
+\newlabel{lst:obdlogger}{{6}{57}{\texttt {ObdLogger.kt} --- adapter initialization and supported-PID detection}{lstlisting.6}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {6}{\ignorespaces \texttt  {ObdLogger.kt} --- adapter initialization and supported-PID detection.}}{57}{lstlisting.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {C}Full Per-Class Metrics Tables}{59}{appendix.C}\protected@file@percent }
+\newlabel{app:metrics}{{C}{59}{Full Per-Class Metrics Tables}{appendix.C}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces XGBoost fixed-holdout (drive1 + live12) per-class metrics. Macro-F1 = 0.962.}}{59}{table.caption.14}\protected@file@percent }
+\newlabel{tab:xgbperclass}{{8}{59}{XGBoost fixed-holdout (drive1 + live12) per-class metrics. Macro-F1 = 0.962}{table.caption.14}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Random Forest baseline, fixed holdout, earlier five-class task. Macro-F1 = 1.000 --- reported as a memorization warning, not a result.}}{59}{table.caption.15}\protected@file@percent }
+\newlabel{tab:rfperclass}{{9}{59}{Random Forest baseline, fixed holdout, earlier five-class task. Macro-F1 = 1.000 --- reported as a memorization warning, not a result}{table.caption.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces LOFO cross-validation: per-class F1 for every held-out family. Mean macro-F1 = 0.977, $\sigma $ = 0.012.}}{60}{table.caption.16}\protected@file@percent }
+\newlabel{tab:lofofull}{{10}{60}{LOFO cross-validation: per-class F1 for every held-out family. Mean macro-F1 = 0.977, $\sigma $ = 0.012}{table.caption.16}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces LOSO cross-validation summary over all 129 single-session folds.}}{60}{table.caption.17}\protected@file@percent }
+\newlabel{tab:losofull}{{11}{60}{LOSO cross-validation summary over all 129 single-session folds}{table.caption.17}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Withheld-configuration experiment: train on injector configuration A, evaluate on configuration B.}}{60}{table.caption.18}\protected@file@percent }
+\newlabel{tab:withheld}{{12}{60}{Withheld-configuration experiment: train on injector configuration A, evaluate on configuration B}{table.caption.18}{}}
+\gdef \@abspage@last{74}
